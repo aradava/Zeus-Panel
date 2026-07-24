@@ -3,6 +3,10 @@ name: Auto Update Free Proxies
 on:
   workflow_dispatch: # Allows manual trigger
 
+concurrency:
+  group: update-proxies
+  cancel-in-progress: true
+
 jobs:
   update-proxies:
     runs-on: ubuntu-latest
@@ -29,5 +33,6 @@ jobs:
             echo "No proxy changes to commit."
           else
             git commit -m "chore: auto-update proxies [skip ci]"
+            git pull --rebase origin main
             git push
           fi
