@@ -9,6 +9,9 @@
     "name": "DE.txt"
   },
   {
+    "name": "FR.txt"
+  },
+  {
     "name": "IT.txt"
   },
   {
@@ -24,12 +27,12 @@
     "name": "SE.txt"
   },
   {
+    "name": "SG.txt"
+  },
+  {
     "name": "TR.txt"
   },
   {
     "name": "US.txt"
-  },
-  {
-    "name": "FR.txt"
   }
 ]
