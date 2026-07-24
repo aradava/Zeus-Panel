@@ -21,3 +21,5 @@ IT|yolomzpd:s0TMIERhWE3Q@212.77.75.125:1088
 NL|socks5://nyx404:92821Bbb@nyx.404i.ir:30750
 IT|yolomzpd:s0TMIERhWE3Q@212.77.75.125:1088
 SG|socks5://nyx404:92821Bbb@404.404i.ir:20088
+US|socks5://nyx404:92821Bbb@socks.404i.ir:42763
+US|socks5://nyx404:92821Bbb@socks.404i.ir:42763
