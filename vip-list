@@ -12,6 +12,9 @@
     "name": "IT.txt"
   },
   {
+    "name": "LV.txt"
+  },
+  {
     "name": "NL.txt"
   },
   {
@@ -27,6 +30,6 @@
     "name": "US.txt"
   },
   {
-    "name": "LV.txt"
+    "name": "FR.txt"
   }
 ]
