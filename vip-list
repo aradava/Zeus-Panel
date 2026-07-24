@@ -1,32 +1,32 @@
 [
   {
+    "name": "CA.txt"
+  },
+  {
     "name": "DE.txt"
-  },
-  {
-    "name": "IT.txt"
-  },
-  {
-    "name": "TR.txt"
   },
   {
     "name": "FR.txt"
   },
   {
+    "name": "IT.txt"
+  },
+  {
     "name": "KR.txt"
   },
   {
-    "name": "CA.txt"
+    "name": "NL.txt"
   },
   {
     "name": "SE.txt"
   },
   {
+    "name": "SG.txt"
+  },
+  {
+    "name": "TR.txt"
+  },
+  {
     "name": "US.txt"
-  },
-  {
-    "name": "CU.txt"
-  },
-  {
-    "name": "RU.txt"
   }
 ]
