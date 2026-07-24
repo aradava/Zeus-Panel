@@ -25,3 +25,4 @@ KR|nfkdipqj:1oYW3NXqiDY4@218.52.249.121:1080
 US|socks5://nyx404:92821Bbb@socks.404i.ir:42763
 KR|nfkdipqj:1oYW3NXqiDY4@218.52.249.121:1080
 CA|bzceqtr9:15rx4ha72jsk@myworld.seenothingsoon.tr:17301
+US|bzceqtr9:d5rx4ha72jsk@myworld.seenothingsoon.tr:17301
