@@ -26,4 +26,3 @@ US|socks5://nyx404:92821Bbb@socks.404i.ir:42763
 KR|nfkdipqj:1oYW3NXqiDY4@218.52.249.121:1080
 CA|bzceqtr9:15rx4ha72jsk@myworld.seenothingsoon.tr:17301
 RU|3icvo7zo:c3yeq1a0v9up@myworld.seenothingsoon.tr:17303
-SE|bujeiykr:JvQ7jvFI6BUa@171.25.158.95:1080
