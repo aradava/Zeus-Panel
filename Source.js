@@ -1149,7 +1149,6 @@ const SubscriptionService = {
 			proxyList = [user.user_socks5 || user.user_proxy_ip];
 		}
 		if (!Array.isArray(proxyList) || proxyList.length === 0) proxyList = [null];
-
 		for (let locIdx = 0; locIdx < proxyList.length; locIdx++) {
 			let proxyItem = proxyList[locIdx];
 			let proxyStr = typeof proxyItem === "object" && proxyItem !== null ? proxyItem.proxy : proxyItem;
@@ -1309,16 +1308,13 @@ function getSelectedUserProxy(userSocks5, request) {
 async function handlevIees(env, storedData = null, ctx = null, request = null) {
 	let rawClientIP = request ? request.headers.get("CF-Connecting-IP") || "unknown" : "unknown";
 	let clientIP = rawClientIP;
-	
 	if (rawClientIP !== "unknown") {
 		if (rawClientIP.includes(':')) {
-			// IPv6: Group by /64
 			const parts = rawClientIP.split(':');
 			if (parts.length >= 4) {
 				clientIP = parts.slice(0, 4).join(':') + '::/64';
 			}
 		} else if (rawClientIP.includes('.')) {
-			// IPv4: Group by /24 (CGNAT Handling)
 			const parts = rawClientIP.split('.');
 			if (parts.length === 4) {
 				clientIP = parts.slice(0, 3).join('.') + '.0/24';
@@ -2218,7 +2214,6 @@ function createDownstreamSender(webSocket, headerData = null) {
 	let pendingBytes = 0;
 	let flushPromise = null;
 	let microtaskQueued = false;
-
 	const adjustSmartBuffer = () => {
 		const buffered = webSocket.bufferedAmount || 0;
 		if (buffered > 256 * 1024) {
@@ -2227,12 +2222,10 @@ function createDownstreamSender(webSocket, headerData = null) {
 			currentPacketCap = Math.min(MAX_CAP, currentPacketCap * 2);
 		}
 	};
-
 	const sendRawChunk = async (chunk) => {
 		if (webSocket.readyState !== 1) throw new Error("ws.readyState is not open");
 		webSocket.send(chunk);
 	};
-
 	const attachResponseHeader = (chunk) => {
 		if (!header) return chunk;
 		const merged = new Uint8Array(header.length + chunk.byteLength);
@@ -2241,7 +2234,6 @@ function createDownstreamSender(webSocket, headerData = null) {
 		header = null;
 		return merged;
 	};
-
 	const flush = async () => {
 		microtaskQueued = false;
 		while (flushPromise) await flushPromise;
@@ -2254,7 +2246,6 @@ function createDownstreamSender(webSocket, headerData = null) {
 		});
 		return flushPromise;
 	};
-
 	return {
 		async sendDirect(data) {
 			let chunk = convertToUint8Array(data);
@@ -2268,7 +2259,6 @@ function createDownstreamSender(webSocket, headerData = null) {
 			chunk = attachResponseHeader(chunk);
 			let offset = 0;
 			const totalBytes = chunk.byteLength;
-
 			while (offset < totalBytes) {
 				if (!pendingBytes && totalBytes - offset >= currentPacketCap) {
 					const sendBytes = Math.min(currentPacketCap, totalBytes - offset);
@@ -2282,7 +2272,6 @@ function createDownstreamSender(webSocket, headerData = null) {
 				pendingBuffer.set(chunk.subarray(offset, offset + copyBytes), pendingBytes);
 				pendingBytes += copyBytes;
 				offset += copyBytes;
-
 				if (pendingBytes >= currentPacketCap || currentPacketCap - pendingBytes < tailBytes) {
 					await flush();
 				} else if (!microtaskQueued) {
@@ -2979,7 +2968,7 @@ const HTML_TEMPLATES = {
         <div class="max-w-6xl mx-auto flex flex-col md:flex-row justify-between items-center gap-4">
             <div class="flex flex-row flex-wrap justify-center items-center gap-3 w-full md:w-auto">
                 <h1 class="text-lg font-bold flex items-center gap-2" dir="ltr">
-                    Z E U S
+                    ⚡️ Z E U S
                     <span id="panel-version" class="text-xs px-2 py-0.5 font-semibold bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400 rounded-full">v1.5.10</span>
                 </h1>
                 <div class="flex items-center gap-3 bg-gray-100 dark:bg-zinc-800/60 px-3 py-1.5 rounded-full border border-gray-200 dark:border-zinc-800/80 shadow-sm flex-shrink-0 w-fit">
@@ -3826,6 +3815,10 @@ const HTML_TEMPLATES = {
         <div class="flex justify-center bg-white p-4 rounded-md mb-4">
             <div id="qrcode-container"></div>
         </div>
+        <button onclick="downloadQrCode()" class="w-full py-2.5 bg-transparent border-2 border-green-600 text-green-700 hover:bg-green-900/20 hover:text-green-800 dark:border-green-500 dark:text-green-500 dark:hover:bg-green-900/40 dark:hover:text-green-400 font-bold rounded-md text-sm transition duration-200 shadow-sm flex items-center justify-center gap-2">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0L8 8m4-4v12"></path></svg>
+            دانلود تصویر QR
+        </button>
     </div>
 </div>
     <div id="bulk-actions-bar" class="fixed bottom-4 left-1/2 -translate-x-1/2 z-[40] bg-white dark:bg-zinc-900/90 border border-gray-200 dark:border-zinc-800/80 px-6 py-4 rounded-md shadow-2xl flex flex-wrap items-center justify-between gap-4 w-[95%] max-w-4xl transition-all duration-300 transform translate-y-28 opacity-0 pointer-events-none backdrop-blur-md">
@@ -4619,13 +4612,11 @@ ${COMMON_TOAST_HTML}
                     let numPorts = String(user.port || '443').split(',').filter(function(p) { return p.trim().length > 0; }).length;
                     if (numPorts === 0) numPorts = 1;
                     let totalConfigs = numProxies * numIps * numPorts;
-
                     let configColorClass = 'text-green-800 dark:text-green-700';
                     if (totalConfigs > 100) configColorClass = 'text-red-600 dark:text-red-500';
                     else if (totalConfigs > 80) configColorClass = 'text-orange-500';
                     else if (totalConfigs > 50) configColorClass = 'text-amber-500';
                     else if (totalConfigs > 20) configColorClass = 'text-green-500';
-
                     let configsCountHtml = '<span class="font-black text-base ' + configColorClass + '" dir="ltr">' + totalConfigs + '</span>';
                     return '<tr class="hover:bg-gray-50 dark:hover:bg-zinc-900/40 border-b border-gray-100 dark:border-zinc-800 last:border-0">' +
                             '<td class="p-1 border-r border-gray-100 dark:border-zinc-800 text-center select-none">' +
@@ -4843,31 +4834,33 @@ ${COMMON_TOAST_HTML}
         }
 window.activeProxyIndex = 0;
 window.proxyFieldsData = [""];
-
 window.renderProxyFieldsUI = function() {
-    const wrapper = document.getElementById("proxies-fields-wrapper");
-    const addBtn = document.getElementById("add-proxy-field-btn");
-    if (!wrapper) return;
-    wrapper.innerHTML = "";
-    window.proxyFieldsData.forEach((val, idx) => {
-        const isFocused = idx === window.activeProxyIndex;
-        const borderClass = isFocused ? "ring-2 ring-blue-500 border-blue-500" : "border-gray-200 dark:border-amoled-border";
-        const row = document.createElement("div");
-        row.className = "flex flex-col gap-0.5 w-full";
-        let inputRow = '<div class="flex items-center gap-1 w-full">' +
-            '<input type="text" value="' + (val || "") + '" onfocus="setActiveProxyField(' + idx + ')" onclick="setActiveProxyField(' + idx + ')" oninput="updateProxyFieldData(' + idx + ', this.value)" placeholder="socks5:// یا http:// (کشور ' + (idx + 1) + ')" dir="ltr" class="flex-1 px-2 py-1.5 bg-gray-50 dark:bg-amoled-input border ' + borderClass + ' rounded text-xs font-mono focus:outline-none text-gray-800 dark:text-zinc-100 transition">';
-        if (idx > 0) {
-            inputRow += '<button type="button" onclick="removeProxyFieldUI(' + idx + ')" class="w-7 h-7 flex-shrink-0 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 hover:bg-red-100 rounded flex items-center justify-center font-bold text-xs shadow-sm" title="حذف">✕</button>';
-        }
-        inputRow += '</div><span id="proxy-ping-label-' + idx + '" class="text-[10px] font-bold text-center empty:hidden transition-colors"></span>';
-        row.innerHTML = inputRow;
-        wrapper.appendChild(row);
-    });
-    if (addBtn) {
-        addBtn.style.display = window.proxyFieldsData.length >= 5 ? "none" : "flex";
-    }
+	const wrapper = document.getElementById("proxies-fields-wrapper");
+	const addBtn = document.getElementById("add-proxy-field-btn");
+	if (!wrapper) return;
+	wrapper.innerHTML = "";
+	window.proxyFieldsData.forEach((val, idx) => {
+		const isFocused = idx === window.activeProxyIndex;
+		const borderClass = isFocused ? "ring-2 ring-blue-500 border-blue-500" : "border-gray-200 dark:border-amoled-border";
+		const row = document.createElement("div");
+		row.className = "flex flex-col gap-0.5 w-full";
+		const proxyStr = (val || "").trim();
+		const pingObj = proxyStr ? (window.proxyPingMap && window.proxyPingMap[proxyStr]) : null;
+		const pingClass = pingObj ? pingObj.className : "text-[10px] font-bold text-center empty:hidden transition-colors";
+		const pingText = pingObj ? pingObj.text : "";
+		let inputRow = '<div class="flex items-center gap-1 w-full">' +
+			'<input type="text" value="' + (val || "") + '" onfocus="setActiveProxyField(' + idx + ')" onclick="setActiveProxyField(' + idx + ')" oninput="updateProxyFieldData(' + idx + ', this.value)" placeholder="socks5:// یا http:// (کشور ' + (idx + 1) + ')" dir="ltr" class="flex-1 px-2 py-1.5 bg-gray-50 dark:bg-amoled-input border ' + borderClass + ' rounded text-xs font-mono focus:outline-none text-gray-800 dark:text-zinc-100 transition">';
+		if (idx > 0) {
+			inputRow += '<button type="button" onclick="removeProxyFieldUI(' + idx + ')" class="w-7 h-7 flex-shrink-0 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 hover:bg-red-100 rounded flex items-center justify-center font-bold text-xs shadow-sm" title="حذف"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg></button>';
+		}
+		inputRow += '</div><span id="proxy-ping-label-' + idx + '" class="' + pingClass + '">' + pingText + '</span>';
+		row.innerHTML = inputRow;
+		wrapper.appendChild(row);
+	});
+	if (addBtn) {
+		addBtn.style.display = window.proxyFieldsData.length >= 5 ? "none" : "flex";
+	}
 };
-
 window.setActiveProxyField = function(idx) {
     if (window.activeProxyIndex === idx) return;
     window.activeProxyIndex = idx;
@@ -4885,11 +4878,14 @@ window.setActiveProxyField = function(idx) {
         });
     }
 };
-
 window.updateProxyFieldData = function(idx, val) {
     window.proxyFieldsData[idx] = val;
+    const span = document.getElementById('proxy-ping-label-' + idx);
+    if (span) {
+        span.innerText = '';
+        span.className = 'text-[10px] font-bold text-center empty:hidden transition-colors';
+    }
 };
-
 window.addProxyFieldUI = function() {
     if (window.proxyFieldsData.length < 5) {
         window.proxyFieldsData.push("");
@@ -4904,7 +4900,6 @@ window.addProxyFieldUI = function() {
         }, 10);
     }
 };
-
 window.removeProxyFieldUI = function(idx) {
     if (window.proxyFieldsData.length > 1) {
         window.proxyFieldsData.splice(idx, 1);
@@ -4964,34 +4959,73 @@ function setModalState(modalId, show) {
             const host = window.location.hostname;
             var ips = [host];
             if (user.ips) {
-                ips = user.ips.split('\\n').map(function(ip) { return ip.trim(); }).filter(function(ip) { return ip.length > 0; });
-                if (ips.length === 0) ips = [host];
+                const parsedIps = user.ips.split('\\n').map(function(ip) { return ip.trim(); }).filter(function(ip) { return ip.length > 0; });
+                if (parsedIps.length > 0) ips = parsedIps;
             }
             var ports = String(user.port || '443').split(',').map(function(p) { return p.trim(); }).filter(function(p) { return p.length > 0; });
             var fp = user.fingerprint || 'chrome';
-            const userFrag = (user.frag_len && user.frag_int) ? '&fragment=' + user.frag_len + ',' + user.frag_int : '';
+            const dynPath = encodeURIComponent("/stream/PANEL_ZEUS/" + (user.uuid ? user.uuid.split("-")[4] : "default"));
             const links = [];
-		const dynPath = encodeURIComponent("/stream/PANEL_ZEUS/" + (user.uuid ? user.uuid.split("-")[4] : "default"));
-		const m1 = decodeURIComponent('%E2%9A%A0%EF%B8%8F%D8%A7%DB%8C%D9%86%20%D9%BE%D9%86%D9%84%20%D8%B1%D8%A7%DB%8C%DA%AF%D8%A7%D9%86%20%D9%88%20%D8%BA%DB%8C%D8%B1%20%D9%82%D8%A7%D8%A8%D9%84%20%D9%81%D8%B1%D9%88%D8%B4%20%D8%A7%D8%B3%D8%AA%E2%9A%A0%EF%B8%8F');
-		const m2 = decodeURIComponent('%E2%99%A8%EF%B8%8F%20%40PANEL_ZEUS%20%D8%B3%D8%A7%D8%AE%D8%AA%20%D8%B1%D8%A7%DB%8C%DA%AF%D8%A7%D9%86%20%E2%99%A8%EF%B8%8F');
+		const m1 = decodeURIComponent('%E2%9A%A0%EF%B8%8F%D9%BE%D9%86%D9%84%20%D8%B1%D8%A7%DB%8C%DA%AF%D8%A7%D9%86%20%D9%88%20%D8%BA%DB%8C%D8%B1%20%D9%82%D8%A7%D8%A8%D9%84%20%D9%81%D8%B1%D9%88%D8%B4%E2%9A%A0%EF%B8%8F');
+		const m2 = decodeURIComponent('%F0%9F%9A%80%40PANEL_ZEUS%20%D8%B3%D8%A7%D8%AE%D8%AA%20%D8%B1%D8%A7%DB%8C%DA%AF%D8%A7%D9%86%F0%9F%9A%80');
 		links.push('vle' + 'ss://' + (user.uuid || '') + '@0.0.0.0:1?encryption=none&security=none&type=ws&host=' + host + '&path=' + dynPath + '#' + encodeURIComponent(m1));
 		links.push('vle' + 'ss://' + (user.uuid || '') + '@0.0.0.0:1?encryption=none&security=none&type=ws&host=' + host + '&path=' + dynPath + '#' + encodeURIComponent(m2));
-            let flagEmoji = '🌐';
-            if (user.user_socks5 || user.user_proxy_ip) {
-                const targetProxy = user.user_socks5 || user.user_proxy_ip;
-                try {
-                    const proxyFlagCache = JSON.parse(localStorage.getItem('proxy_flag_cache') || '{}');
-                    if (proxyFlagCache[targetProxy]) flagEmoji = proxyFlagCache[targetProxy];
-                } catch(e) {}
+            let remVol = "Unlimited";
+            if (user.limit_gb) {
+                let rem = user.limit_gb - (user.used_gb || 0);
+                remVol = rem > 0 ? rem.toFixed(2) + "GB" : "0GB";
             }
-            ips.forEach((ip) => {
-                ports.forEach((portStr) => {
-					const isTlsPort = tlsPorts.includes(portStr);
-					const tlsVal = isTlsPort ? 'tls' : 'none';
-					const remark = "ZEUS | " + flagEmoji + " | " + user.username;
-					links.push('vle' + 'ss://' + (user.uuid || '') + '@' + ip + ':' + portStr + '?path=' + dynPath + '&security=' + tlsVal + '&encryption=none&insecure=0&host=' + host + '&fp=' + fp + '&type=ws&allowInsecure=0&sni=' + host + userFrag + '#' + encodeURIComponent(remark));
-				});
-            });
+            let remTime = "Unlimited";
+            if (user.expiry_days && user.created_at) {
+                const created = new Date(user.created_at);
+                const expiryDate = new Date(created.getTime() + user.expiry_days * 24 * 60 * 60 * 1000);
+                const diffDays = Math.ceil((expiryDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+                remTime = diffDays > 0 ? diffDays + "Days" : "0Days";
+            }
+            let remReq = "Unlimited";
+            if (user.limit_req) {
+                let rem = user.limit_req - (user.used_req || 0);
+                remReq = rem > 0 ? rem.toLocaleString() + "Req" : "0Req";
+            }
+            const infoRemark = "📊 remaining | \u200E" + remVol + " | \u200E" + remTime + " | \u200E" + remReq;
+            links.push('vle' + 'ss://' + (user.uuid || '') + '@' + host + ':80?path=' + dynPath + '&security=none&encryption=none&host=' + host + '&fp=' + fp + '&type=ws#' + encodeURIComponent(infoRemark));
+            const rawPath = "/stream/PANEL_ZEUS/" + (user.uuid ? user.uuid.split("-")[4] : "default");
+            let proxyList = [];
+            try {
+                if (user.user_socks5 && user.user_socks5.trim().startsWith("[")) {
+                    proxyList = JSON.parse(user.user_socks5);
+                } else if (user.user_socks5 || user.user_proxy_ip) {
+                    proxyList = [user.user_socks5 || user.user_proxy_ip];
+                } else {
+                    proxyList = [null];
+                }
+            } catch (e) {
+                proxyList = [user.user_socks5 || user.user_proxy_ip];
+            }
+            if (!Array.isArray(proxyList) || proxyList.length === 0) proxyList = [null];
+            let proxyFlagCache = {};
+            try { proxyFlagCache = JSON.parse(localStorage.getItem('proxy_flag_cache') || '{}'); } catch(e) {}
+            for (let locIdx = 0; locIdx < proxyList.length; locIdx++) {
+                let proxyItem = proxyList[locIdx];
+                let proxyStr = typeof proxyItem === "object" && proxyItem !== null ? proxyItem.proxy : proxyItem;
+                let countryCode = typeof proxyItem === "object" && proxyItem !== null ? proxyItem.country : (user.user_proxy_iata || "");
+                let flagEmoji = "🌐";
+                if (countryCode && typeof getFlagEmoji === 'function') {
+                    flagEmoji = getFlagEmoji(countryCode);
+                } else if (proxyStr && proxyFlagCache[proxyStr]) {
+                    flagEmoji = proxyFlagCache[proxyStr];
+                }
+                const currentDynPath = encodeURIComponent(rawPath + ((proxyList[0] !== null && proxyList[0] !== "") ? "?loc=" + locIdx : ""));
+                ips.forEach((ip) => {
+                    ports.forEach((portStr) => {
+                        const isTlsPort = ["443", "2053", "2083", "2087", "2096", "8443"].includes(portStr);
+                        const tlsVal = isTlsPort ? "tls" : "none";
+                        const userFrag = user.frag_len && user.frag_int ? "&fragment=" + user.frag_len + "," + user.frag_int : "";
+                        const remark = "ZEUS | " + flagEmoji + " | " + user.username;
+                        links.push('vle' + 'ss://' + (user.uuid || '') + '@' + ip + ':' + portStr + '?path=' + currentDynPath + '&security=' + tlsVal + '&encryption=none&insecure=0&host=' + host + '&fp=' + fp + '&type=ws&allowInsecure=0&sni=' + host + userFrag + '#' + encodeURIComponent(remark));
+                    });
+                });
+            }
             return links.join('\\n');
         }
         function getSubLink(username) {
@@ -5015,6 +5049,28 @@ function setModalState(modalId, show) {
                 new QRCode(container, { text: text, width: 200, height: 200, colorDark: "#000000", colorLight: "#ffffff", correctLevel: QRCode.CorrectLevel.M });
             }
             setModalState('qr-modal', show);
+        }
+        function downloadQrCode() {
+            const container = document.getElementById('qrcode-container');
+            if (!container) return;
+            const canvas = container.querySelector('canvas');
+            const img = container.querySelector('img');
+            let dataUrl = '';
+            if (canvas) {
+                dataUrl = canvas.toDataURL("image/png");
+            } else if (img && img.src) {
+                dataUrl = img.src;
+            }
+            if (!dataUrl) {
+                alert('⚠️ تصویر QR برای دانلود یافت نشد!');
+                return;
+            }
+            const downloadAnchor = document.createElement('a');
+            downloadAnchor.href = dataUrl;
+            downloadAnchor.download = "zeus_qrcode_" + Date.now() + ".png";
+            document.body.appendChild(downloadAnchor);
+            downloadAnchor.click();
+            downloadAnchor.remove();
         }
         function showSubQr(encodedUsername) {
             const username = decodeURIComponent(encodedUsername);
@@ -5194,51 +5250,63 @@ async function loadProxyFlags() {
     }
 }
 async function testUserSocksProxy() {
-	const idx = window.activeProxyIndex || 0;
 	const btn = document.getElementById('test-user-proxy-btn');
-	const resultSpan = document.getElementById('proxy-ping-label-' + idx);
-	const proxyStr = (window.proxyFieldsData[idx] || "").trim();
-	if (!proxyStr) {
-		if (resultSpan) {
-			resultSpan.innerText = 'وارد نشده!';
-			resultSpan.className = 'text-[10px] font-bold text-red-500 block mt-0.5';
-		}
-		return;
+	if (btn) {
+		btn.disabled = true;
+		btn.innerText = 'صبر کنید...';
 	}
-	btn.disabled = true;
-	btn.innerText = 'صبر کنید...';
-	if (resultSpan) resultSpan.innerText = 'در حال تست...';
-	const controller = new AbortController();
-	const timeoutId = setTimeout(() => controller.abort(), 5000);
-	try {
-		const res = await fetch('/api/test-proxy', {
-			method: 'POST',
-			headers: { 'Content-Type': 'application/json' },
-			body: JSON.stringify({ proxy: proxyStr }),
-			signal: controller.signal
-		});
-		clearTimeout(timeoutId);
-		const data = await res.json();
-		if (res.ok && data.success) {
-			const flag = typeof getFlagEmoji === 'function' ? getFlagEmoji(data.country) : '🌐';
+	window.proxyPingMap = {};
+	const promises = window.proxyFieldsData.map(async (val, idx) => {
+		const resultSpan = document.getElementById('proxy-ping-label-' + idx);
+		const proxyStr = (val || "").trim();
+		if (!proxyStr) {
 			if (resultSpan) {
-				resultSpan.innerText = flag + ' پینگ: ' + data.ping + 'ms';
-				resultSpan.className = 'text-[10px] font-bold text-green-600 block mt-0.5';
+				resultSpan.innerText = 'وارد نشده!';
+				resultSpan.className = 'text-[10px] font-bold text-red-500 block mt-0.5 text-center';
 			}
-		} else {
-			if (resultSpan) {
-				resultSpan.innerText = 'خطا: ' + (data.error || 'ناموفق');
-				resultSpan.className = 'text-[10px] font-bold text-red-500 block mt-0.5 break-words';
-			}
+			return;
 		}
-	} catch (e) {
-		clearTimeout(timeoutId);
 		if (resultSpan) {
-			if (e.name === 'AbortError') resultSpan.innerText = 'تایم‌اوت (خراب)';
-			else resultSpan.innerText = 'خطا در ارتباط';
-			resultSpan.className = 'text-[10px] font-bold text-red-500 block mt-0.5';
+			resultSpan.innerText = 'در حال تست...';
+			resultSpan.className = 'text-[10px] font-bold text-amber-500 block mt-0.5 text-center';
 		}
-	} finally {
+		const controller = new AbortController();
+		const timeoutId = setTimeout(() => controller.abort(), 5000);
+		try {
+			const res = await fetch('/api/test-proxy', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ proxy: proxyStr }),
+				signal: controller.signal
+			});
+			clearTimeout(timeoutId);
+			const data = await res.json();
+			if (res.ok && data.success) {
+				const flag = typeof getFlagEmoji === 'function' ? getFlagEmoji(data.country) : '🌐';
+				if (resultSpan) {
+					resultSpan.innerText = flag + ' پینگ: ' + data.ping + 'ms';
+					resultSpan.className = 'text-[10px] font-bold text-green-600 block mt-0.5 text-center';
+					window.proxyPingMap[proxyStr] = { text: resultSpan.innerText, className: resultSpan.className };
+				}
+			} else {
+				if (resultSpan) {
+					resultSpan.innerText = 'خطا: ' + (data.error || 'ناموفق');
+					resultSpan.className = 'text-[10px] font-bold text-red-500 block mt-0.5 break-words text-center';
+					window.proxyPingMap[proxyStr] = { text: resultSpan.innerText, className: resultSpan.className };
+				}
+			}
+		} catch (e) {
+			clearTimeout(timeoutId);
+			if (resultSpan) {
+				if (e.name === 'AbortError') resultSpan.innerText = 'تایم‌اوت (خراب)';
+				else resultSpan.innerText = 'خطا در ارتباط';
+				resultSpan.className = 'text-[10px] font-bold text-red-500 block mt-0.5 text-center';
+				window.proxyPingMap[proxyStr] = { text: resultSpan.innerText, className: resultSpan.className };
+			}
+		}
+	});
+	await Promise.all(promises);
+	if (btn) {
 		btn.disabled = false;
 		btn.innerText = 'تست پـروکـسـی';
 	}
@@ -5257,9 +5325,16 @@ async function testUserSocksProxy() {
                 };
                 const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(backupData, null, 2));
                 const downloadAnchor = document.createElement('a');
-                const dateStr = new Date().toISOString().split('T')[0];
+                const host = window.location.hostname;
+                const now = new Date();
+                const dateTimeStr = now.getFullYear() + '-' + 
+                    String(now.getMonth() + 1).padStart(2, '0') + '-' + 
+                    String(now.getDate()).padStart(2, '0') + '_' + 
+                    String(now.getHours()).padStart(2, '0') + '-' + 
+                    String(now.getMinutes()).padStart(2, '0') + '-' + 
+                    String(now.getSeconds()).padStart(2, '0');
                 downloadAnchor.setAttribute("href", dataStr);
-                downloadAnchor.setAttribute("download", "zeus_full_backup_" + dateStr + ".json");
+                downloadAnchor.setAttribute("download", "zeus_backup_" + host + "_" + dateTimeStr + ".json");
                 document.body.appendChild(downloadAnchor);
                 downloadAnchor.click();
                 downloadAnchor.remove();
@@ -5466,7 +5541,7 @@ async function testUserSocksProxy() {
                 window.location.reload();
             }
         }
-const CURRENT_VERSION = '1.10.0';
+const CURRENT_VERSION = '1.10.1';
 const UPDATE_FIX = "constsCURRENT_VERSION='d.d.d'";
 		async function checkForUpdates(isManual = false) {
             try {
@@ -6194,6 +6269,10 @@ window.addEventListener('click', (e) => {
         <div class="flex justify-center bg-white p-4 rounded-md mb-4">
             <div id="qrcode-container"></div>
         </div>
+        <button onclick="downloadQrCode()" class="w-full py-2.5 bg-transparent border-2 border-green-600 text-green-700 hover:bg-green-900/20 hover:text-green-800 dark:border-green-500 dark:text-green-500 dark:hover:bg-green-900/40 dark:hover:text-green-400 font-bold rounded-md text-sm transition duration-200 shadow-sm flex items-center justify-center gap-2">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0L8 8m4-4v12"></path></svg>
+            دانلود تصویر QR
+        </button>
     </div>
 </div>
 <div class="flex flex-col gap-4 mt-6 z-10">
@@ -6234,36 +6313,80 @@ ${COMMON_TOAST_HTML}
             return window.location.host;
         }
         function getvIeesLink() {
-            const u = window.statusUser;
-            const host = getHost();
-            var ips = [host];
-            if (u.ips) {
-                ips = u.ips.split('\\n').map(function(ip) { return ip.trim(); }).filter(function(ip) { return ip.length > 0; });
-                if (ips.length === 0) ips = [host];
-            }
-            var ports = String(u.port || '443').split(',').map(function(p) { return p.trim(); }).filter(function(p) { return p.length > 0; });
-            var fp = u.fingerprint || 'chrome';
-			const userFrag = (u.frag_len && u.frag_int) ? '&fragment=' + u.frag_len + ',' + u.frag_int : '';
+			const u = window.statusUser;
+			if (!u) return '';
+			const host = getHost();
+			var ips = [host];
+			if (u.ips) {
+				const parsedIps = u.ips.split('\\n').map(function(ip) { return ip.trim(); }).filter(function(ip) { return ip.length > 0; });
+				if (parsedIps.length > 0) ips = parsedIps;
+			}
+			var ports = String(u.port || '443').split(',').map(function(p) { return p.trim(); }).filter(function(p) { return p.length > 0; });
+			var fp = u.fingerprint || 'chrome';
 			const dynPath = encodeURIComponent("/stream/PANEL_ZEUS/" + (u.uuid ? u.uuid.split("-")[4] : "default"));
-			var links = [];
-            let flagEmoji = '🌐';
-            if (u.user_socks5 || u.user_proxy_ip) {
-                const targetProxy = u.user_socks5 || u.user_proxy_ip;
-                try {
-                    const proxyFlagCache = JSON.parse(localStorage.getItem('proxy_flag_cache') || '{}');
-                    if (proxyFlagCache[targetProxy]) flagEmoji = proxyFlagCache[targetProxy];
-                } catch(e) {}
-            }
-            ips.forEach(function(ip, ipIndex) {
-                ports.forEach(function(portStr) {
-					var isTlsPort = ['443', '2053', '2083', '2087', '2096', '8443'].includes(portStr);
-					var tlsVal = isTlsPort ? 'tls' : 'none';
-					var remark = "ZEUS | " + flagEmoji + " | " + u.username;
-					links.push('vle' + 'ss://' + (u.uuid || '') + '@' + ip + ':' + portStr + '?path=' + dynPath + '&security=' + tlsVal + '&encryption=none&insecure=0&host=' + host + '&fp=' + fp + '&type=ws&allowInsecure=0&sni=' + host + userFrag + '#' + encodeURIComponent(remark));
+			const links = [];
+			const m1 = decodeURIComponent('%E2%9A%A0%EF%B8%8F%D9%BE%D9%86%D9%84%20%D8%B1%D8%A7%DB%8C%DA%AF%D8%A7%D9%86%20%D9%88%20%D8%BA%DB%8C%D8%B1%20%D9%82%D8%A7%D8%A8%D9%84%20%D9%81%D8%B1%D9%88%D8%B4%E2%9A%A0%EF%B8%8F');
+			const m2 = decodeURIComponent('%F0%9F%9A%80%40PANEL_ZEUS%20%D8%B3%D8%A7%D8%AE%D8%AA%20%D8%B1%D8%A7%DB%8C%DA%AF%D8%A7%D9%86%F0%9F%9A%80');
+			links.push('vle' + 'ss://' + (u.uuid || '') + '@0.0.0.0:1?encryption=none&security=none&type=ws&host=' + host + '&path=' + dynPath + '#' + encodeURIComponent(m1));
+			links.push('vle' + 'ss://' + (u.uuid || '') + '@0.0.0.0:1?encryption=none&security=none&type=ws&host=' + host + '&path=' + dynPath + '#' + encodeURIComponent(m2));
+			let remVol = "Unlimited";
+			if (u.limit_gb) {
+				let rem = u.limit_gb - (u.used_gb || 0);
+				remVol = rem > 0 ? rem.toFixed(2) + "GB" : "0GB";
+			}
+			let remTime = "Unlimited";
+			if (u.expiry_days && u.created_at) {
+				const created = new Date(u.created_at);
+				const expiryDate = new Date(created.getTime() + u.expiry_days * 24 * 60 * 60 * 1000);
+				const diffDays = Math.ceil((expiryDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+				remTime = diffDays > 0 ? diffDays + "Days" : "0Days";
+			}
+			let remReq = "Unlimited";
+			if (u.limit_req) {
+				let rem = u.limit_req - (u.used_req || 0);
+				remReq = rem > 0 ? rem.toLocaleString() + "Req" : "0Req";
+			}
+			const infoRemark = "📊 remaining | \u200E" + remVol + " | \u200E" + remTime + " | \u200E" + remReq;
+			links.push('vle' + 'ss://' + (u.uuid || '') + '@' + host + ':80?path=' + dynPath + '&security=none&encryption=none&host=' + host + '&fp=' + fp + '&type=ws#' + encodeURIComponent(infoRemark));
+			const rawPath = "/stream/PANEL_ZEUS/" + (u.uuid ? u.uuid.split("-")[4] : "default");
+			let proxyList = [];
+			try {
+				if (u.user_socks5 && u.user_socks5.trim().startsWith("[")) {
+					proxyList = JSON.parse(u.user_socks5);
+				} else if (u.user_socks5 || u.user_proxy_ip) {
+					proxyList = [u.user_socks5 || u.user_proxy_ip];
+				} else {
+					proxyList = [null];
+				}
+			} catch (e) {
+				proxyList = [u.user_socks5 || u.user_proxy_ip];
+			}
+			if (!Array.isArray(proxyList) || proxyList.length === 0) proxyList = [null];
+			let proxyFlagCache = {};
+			try { proxyFlagCache = JSON.parse(localStorage.getItem('proxy_flag_cache') || '{}'); } catch(e) {}
+			for (let locIdx = 0; locIdx < proxyList.length; locIdx++) {
+				let proxyItem = proxyList[locIdx];
+				let proxyStr = typeof proxyItem === "object" && proxyItem !== null ? proxyItem.proxy : proxyItem;
+				let countryCode = typeof proxyItem === "object" && proxyItem !== null ? proxyItem.country : (u.user_proxy_iata || "");
+				let flagEmoji = "🌐";
+				if (countryCode && typeof getFlagEmoji === 'function') {
+					flagEmoji = getFlagEmoji(countryCode);
+				} else if (proxyStr && proxyFlagCache[proxyStr]) {
+					flagEmoji = proxyFlagCache[proxyStr];
+				}
+				const currentDynPath = encodeURIComponent(rawPath + ((proxyList[0] !== null && proxyList[0] !== "") ? "?loc=" + locIdx : ""));
+				ips.forEach((ip) => {
+					ports.forEach((portStr) => {
+						const isTlsPort = ["443", "2053", "2083", "2087", "2096", "8443"].includes(portStr);
+						const tlsVal = isTlsPort ? "tls" : "none";
+						const userFrag = u.frag_len && u.frag_int ? "&fragment=" + u.frag_len + "," + u.frag_int : "";
+						const remark = "ZEUS | " + flagEmoji + " | " + u.username;
+						links.push('vle' + 'ss://' + (u.uuid || '') + '@' + ip + ':' + portStr + '?path=' + currentDynPath + '&security=' + tlsVal + '&encryption=none&insecure=0&host=' + host + '&fp=' + fp + '&type=ws&allowInsecure=0&sni=' + host + userFrag + '#' + encodeURIComponent(remark));
+					});
 				});
-            });
-            return links.join('\\n');
-        }
+			}
+			return links.join('\\n');
+		}
         function copyvIeesConfig() {
             navigator.clipboard.writeText(getvIeesLink()).then(() => alert('✅ کـانفـیگ vIees با موفقیت کپی شد!'));
         }
@@ -6272,30 +6395,52 @@ ${COMMON_TOAST_HTML}
             navigator.clipboard.writeText(link).then(() => alert('✅ لینک ساب متنی کپی شد!'));
         }
 		function toggleQrModal(show, text) {
-            const modal = document.getElementById('qr-modal');
-            const card = document.getElementById('qr-modal-card');
-            const container = document.getElementById('qrcode-container');
-            if (show) {
-                container.innerHTML = '';
-                new QRCode(container, {
-                    text: text,
-                    width: 200,
-                    height: 200,
-                    colorDark: "#000000",
-                    colorLight: "#ffffff",
-                    correctLevel: QRCode.CorrectLevel.M
-                });
-                modal.classList.remove('opacity-0', 'pointer-events-none');
-                modal.classList.add('opacity-100', 'pointer-events-auto');
-                card.classList.remove('opacity-0', 'scale-95');
-                card.classList.add('opacity-100', 'scale-100');
-            } else {
-                modal.classList.remove('opacity-100', 'pointer-events-auto');
-                modal.classList.add('opacity-0', 'pointer-events-none');
-                card.classList.remove('opacity-100', 'scale-100');
-                card.classList.add('opacity-0', 'scale-95');
-            }
-        }
+			const modal = document.getElementById('qr-modal');
+			const card = document.getElementById('qr-modal-card');
+			const container = document.getElementById('qrcode-container');
+			if (show) {
+				container.innerHTML = '';
+				new QRCode(container, {
+					text: text,
+					width: 200,
+					height: 200,
+					colorDark: "#000000",
+					colorLight: "#ffffff",
+					correctLevel: QRCode.CorrectLevel.M
+				});
+				modal.classList.remove('opacity-0', 'pointer-events-none');
+				modal.classList.add('opacity-100', 'pointer-events-auto');
+				card.classList.remove('opacity-0', 'scale-95');
+				card.classList.add('opacity-100', 'scale-100');
+			} else {
+				modal.classList.remove('opacity-100', 'pointer-events-auto');
+				modal.classList.add('opacity-0', 'pointer-events-none');
+				card.classList.remove('opacity-100', 'scale-100');
+				card.classList.add('opacity-0', 'scale-95');
+			}
+		}
+		function downloadQrCode() {
+			const container = document.getElementById('qrcode-container');
+			if (!container) return;
+			const canvas = container.querySelector('canvas');
+			const img = container.querySelector('img');
+			let dataUrl = '';
+			if (canvas) {
+				dataUrl = canvas.toDataURL("image/png");
+			} else if (img && img.src) {
+				dataUrl = img.src;
+			}
+			if (!dataUrl) {
+				alert('⚠️ تصویر QR برای دانلود یافت نشد!');
+				return;
+			}
+			const downloadAnchor = document.createElement('a');
+			downloadAnchor.href = dataUrl;
+			downloadAnchor.download = "zeus_qrcode_" + Date.now() + ".png";
+			document.body.appendChild(downloadAnchor);
+			downloadAnchor.click();
+			downloadAnchor.remove();
+		}
         function showSubQr() {
             const link = window.location.protocol + '//' + getHost() + '/sub/' + encodeURIComponent(window.statusUser.username);
             toggleQrModal(true, link);
@@ -6331,7 +6476,6 @@ if (u.user_proxy_iata) {
     } catch(e) {
         proxyList = [u.user_socks5 || u.user_proxy_ip];
     }
-    
     // ۱. نمایش اولیه از کش (یا علامت لودینگ)
     let initialFlags = proxyList.map(item => {
         let targetProxy = typeof item === 'object' && item !== null ? item.proxy : item;
@@ -6343,21 +6487,16 @@ if (u.user_proxy_iata) {
         } catch(e) {}
         return '⏳';
     });
-    
     flagContainer.innerText = initialFlags.join(' ');
-
     // ۲. دریافت اطلاعات برای پرچم‌های نامشخص و آپدیت نهایی
     Promise.all(proxyList.map((item, index) => {
         let targetProxy = typeof item === 'object' && item !== null ? item.proxy : item;
         let targetCountry = typeof item === 'object' && item !== null ? item.country : null;
-        
         if (targetCountry) return Promise.resolve(getFlagEmoji(targetCountry));
-        
         try {
             const proxyFlagCache = JSON.parse(localStorage.getItem('proxy_flag_cache') || '{}');
             if (proxyFlagCache[targetProxy]) return Promise.resolve(proxyFlagCache[targetProxy]);
         } catch(e) {}
-
         return fetch('/api/test-proxy', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
