@@ -25,3 +25,5 @@ US|socks5://nyx404:92821Bbb@socks.404i.ir:42763
 CA|bzceqtr9:15rx4ha72jsk@myworld.seenothingsoon.tr:17301
 NL|opslt994:e2efvx2kqzjv@sakura.proxy.rlwy.net:55708
 MX|qwmi3n3r:7l9ft92o3snr@myworld.seenothingsoon.tr:17306
+US|bzceqtr9:d5rx4ha72jsk@myworld.seenothingsoon.tr:17301
+SE|bujeiykr:JvQ7jvFI6BUa@171.25.158.95:1080
