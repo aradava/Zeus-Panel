@@ -23,4 +23,3 @@ US|socks5://nyx404:92821Bbb@socks.404i.ir:42763
 US|socks5://nyx404:92821Bbb@socks.404i.ir:42763
 US|socks5://nyx404:92821Bbb@socks.404i.ir:42763
 CA|bzceqtr9:15rx4ha72jsk@myworld.seenothingsoon.tr:17301
-TR|Alis:vaslim@yami.alis1.ir:503
