@@ -151,11 +151,11 @@ The script features an interactive menu, automatic port configuration, random se
 
 ## Star History
 
-<a href="https://www.star-history.com/?repos=zeus-panel%2FZEUS-PANEL&type=date&legend=bottom-right">
+<a href="https://www.star-history.com/?repos=zeus-panel%2FZEUS-PANEL&type=timeline&legend=top-left">
  <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=zeus-panel/ZEUS-PANEL&type=date&theme=dark&legend=bottom-right&sealed_token=TgjQzw9sfe0AL5jR0BzKbYqqj0rsPAKA5jG5Y4XszBivntfZqiZcjpDh21_tNRqDRR8K4UGHNe9W3iCotFJE0Lbp8ROU2RMYii7_ZEsPeB0GpRZIXV8f5w" />
-   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=zeus-panel/ZEUS-PANEL&type=date&legend=bottom-right&sealed_token=TgjQzw9sfe0AL5jR0BzKbYqqj0rsPAKA5jG5Y4XszBivntfZqiZcjpDh21_tNRqDRR8K4UGHNe9W3iCotFJE0Lbp8ROU2RMYii7_ZEsPeB0GpRZIXV8f5w" />
-   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=zeus-panel/ZEUS-PANEL&type=date&legend=bottom-right&sealed_token=TgjQzw9sfe0AL5jR0BzKbYqqj0rsPAKA5jG5Y4XszBivntfZqiZcjpDh21_tNRqDRR8K4UGHNe9W3iCotFJE0Lbp8ROU2RMYii7_ZEsPeB0GpRZIXV8f5w" />
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=zeus-panel/ZEUS-PANEL&type=timeline&theme=dark&legend=top-left&sealed_token=i_sLQbXdIcBHxepyO44kQnvS7Irvv4WXN6ymij0Q7QoNRXE7OZrtzWucaSXZkmV6a75z2K86DZT3czyswa0OKLXbvo140fpDGX5k8PNihA-ApzioHjH0cQ" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=zeus-panel/ZEUS-PANEL&type=timeline&legend=top-left&sealed_token=i_sLQbXdIcBHxepyO44kQnvS7Irvv4WXN6ymij0Q7QoNRXE7OZrtzWucaSXZkmV6a75z2K86DZT3czyswa0OKLXbvo140fpDGX5k8PNihA-ApzioHjH0cQ" />
+   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=zeus-panel/ZEUS-PANEL&type=timeline&legend=top-left&sealed_token=i_sLQbXdIcBHxepyO44kQnvS7Irvv4WXN6ymij0Q7QoNRXE7OZrtzWucaSXZkmV6a75z2K86DZT3czyswa0OKLXbvo140fpDGX5k8PNihA-ApzioHjH0cQ" />
  </picture>
 </a>
 
