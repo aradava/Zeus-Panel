@@ -11,7 +11,7 @@ let GLOBAL_REQ_COUNT = 0;
 let GLOBAL_LAST_REQ_WRITE = 0;
 const DNS_CACHE_TTL = 5 * 60 * 1000;
 const DOH_RESOLVER = "https://cloudflare-dns.com/dns-query";
-const UPSTREAM_BUNDLE_TARGET_BYTES = 16 * 1024;
+const UPSTREAM_BUNDLE_TARGET_BYTES = 128 * 1024;
 const UPSTREAM_QUEUE_MAX_BYTES = 16 * 1024 * 1024;
 const UPSTREAM_QUEUE_MAX_ITEMS = 4096;
 const DOWNSTREAM_GRAIN_BYTES = 32 * 1024;
@@ -131,11 +131,35 @@ async function replaceBrokenProxy(username, env, oldProxy) {
 		if (GLOBAL_WRITE_LOCK.get(username + "_proxy_rotate")) return;
 		GLOBAL_WRITE_LOCK.set(username + "_proxy_rotate", true);
 		const user = await env.DB.prepare("SELECT id, user_socks5, auto_rotate_user_proxy FROM users WHERE username = ?").bind(username).first();
-		if (!user || user.auto_rotate_user_proxy !== 1 || user.user_socks5 !== oldProxy) {
+		if (!user || user.auto_rotate_user_proxy !== 1 || !user.user_socks5) {
 			GLOBAL_WRITE_LOCK.delete(username + "_proxy_rotate");
 			return;
 		}
-		let countryCode = "all";
+		let proxyList = [];
+		let isArrayMode = false;
+		try {
+			if (user.user_socks5.trim().startsWith("[")) {
+				proxyList = JSON.parse(user.user_socks5);
+				isArrayMode = true;
+			} else {
+				proxyList = [user.user_socks5];
+			}
+		} catch (e) {
+			proxyList = [user.user_socks5];
+		}
+		let matchIndex = -1;
+		for (let i = 0; i < proxyList.length; i++) {
+			let itemStr = typeof proxyList[i] === "object" && proxyList[i] !== null ? proxyList[i].proxy : proxyList[i];
+			if (itemStr === oldProxy) {
+				matchIndex = i;
+				break;
+			}
+		}
+		if (matchIndex === -1) {
+			GLOBAL_WRITE_LOCK.delete(username + "_proxy_rotate");
+			return;
+		}
+		let countryCode = (typeof proxyList[matchIndex] === "object" && proxyList[matchIndex] !== null && proxyList[matchIndex].country) ? proxyList[matchIndex].country : "all";
 		try {
 			const payload = new TextEncoder().encode("GET /json/?fields=countryCode HTTP/1.1\r\nHost: ip-api.com\r\nConnection: close\r\n\r\n");
 			const s = await connectProxy(oldProxy, "ip-api.com", 80, payload);
@@ -250,7 +274,16 @@ async function replaceBrokenProxy(username, env, oldProxy) {
 			} catch (e) {}
 		}
 		if (newProxy) {
-			await env.DB.prepare("UPDATE users SET user_socks5 = ? WHERE id = ?").bind(newProxy, user.id).run();
+			let finalProxyVal = newProxy;
+			if (isArrayMode) {
+				if (typeof proxyList[matchIndex] === "object" && proxyList[matchIndex] !== null) {
+					proxyList[matchIndex].proxy = newProxy;
+				} else {
+					proxyList[matchIndex] = newProxy;
+				}
+				finalProxyVal = JSON.stringify(proxyList);
+			}
+			await env.DB.prepare("UPDATE users SET user_socks5 = ? WHERE id = ?").bind(finalProxyVal, user.id).run();
 		}
 	} catch(e) {
 	} finally {
@@ -310,7 +343,7 @@ const Router = {
 		let subUser = decodeURIComponent(url.pathname.slice(offset));
 		const host = url.hostname;
 		try {
-			const user = await env.DB.prepare("SELECT * FROM users WHERE username = ? OR uuid = ?").bind(subUser, subUser).first();
+			const user = await env.DB.prepare("SELECT * FROM users WHERE username = ? COLLATE NOCASE OR uuid = ?").bind(subUser, subUser).first();
 			if (!user || user.connection_type !== "vl" + "e" + "ss") {
 				return new Response("Not Found", { status: 404 });
 			}
@@ -350,7 +383,7 @@ const Router = {
 			return new Response("Username is required", { status: 400 });
 		}
 		try {
-			const user = await env.DB.prepare("SELECT * FROM users WHERE username = ? OR uuid = ?").bind(username, username).first();
+			const user = await env.DB.prepare("SELECT * FROM users WHERE username = ? COLLATE NOCASE OR uuid = ?").bind(username, username).first();
 			if (!user) {
 				return new Response("User not found", { status: 404 });
 			}
@@ -794,7 +827,7 @@ const Router = {
 							if (!/^[a-zA-Z0-9_-]+$/.test(new_username)) {
 								return new Response(JSON.stringify({ error: "نام کاربری جدید غیرمجاز است" }), { status: 400, headers: { "Content-Type": "application/json; charset=utf-8" } });
 							}
-							const existing = await env.DB.prepare("SELECT id FROM users WHERE username = ?").bind(new_username).first();
+							const existing = await env.DB.prepare("SELECT id FROM users WHERE username = ? COLLATE NOCASE").bind(new_username).first();
 							if (existing) {
 								return new Response(JSON.stringify({ error: "این نام کاربری از قبل وجود دارد" }), { status: 400, headers: { "Content-Type": "application/json" } });
 							}
@@ -920,7 +953,7 @@ const Router = {
 					const finalCreatedAt = created_at || new Date().toISOString();
 					const parsedIsActive = parseInt(is_active);
 					const finalIsActive = !isNaN(parsedIsActive) ? parsedIsActive : 1;
-					const existingUser = await env.DB.prepare("SELECT id FROM users WHERE username = ?").bind(username).first();
+					const existingUser = await env.DB.prepare("SELECT id FROM users WHERE username = ? COLLATE NOCASE").bind(username).first();
 					if (existingUser) {
 						return new Response(JSON.stringify({ error: "این نام کاربری از قبل وجود دارد" }), { status: 400, headers: { "Content-Type": "application/json; charset=utf-8" } });
 					}
@@ -1102,69 +1135,88 @@ const SubscriptionService = {
 		}
 		const infoRemark = "📊 remaining | \u200E" + remVol + " | \u200E" + remTime + " | \u200E" + remReq;
 		links.push("vl" + "e" + "ss://" + user.uuid + "@" + host + ":80?path=" + dynPath + "&security=none&encryption=none&host=" + host + "&fp=" + fp + "&type=ws#" + encodeURIComponent(infoRemark));
-		let countryCode = user.user_proxy_iata || "";
-		if (!countryCode && (user.user_socks5 || user.user_proxy_ip)) {
-			let proxy = user.user_socks5 || user.user_proxy_ip;
-			try {
-				const payload = new TextEncoder().encode("GET /json/?fields=countryCode HTTP/1.1\r\nHost: ip-api.com\r\nConnection: close\r\n\r\n");
-				const s = await connectProxy(proxy, "ip-api.com", 80, payload);
-				const reader = s.readable.getReader();
-				let resStr = "";
-				const timeoutId = setTimeout(() => { try { s.close(); } catch(e){} }, 2000);
+		const rawPath = "/stream/PANEL_ZEUS/" + (user.uuid ? user.uuid.split("-")[4] : "default");
+		let proxyList = [];
+		try {
+			if (user.user_socks5 && user.user_socks5.trim().startsWith("[")) {
+				proxyList = JSON.parse(user.user_socks5);
+			} else if (user.user_socks5 || user.user_proxy_ip) {
+				proxyList = [user.user_socks5 || user.user_proxy_ip];
+			} else {
+				proxyList = [null];
+			}
+		} catch (e) {
+			proxyList = [user.user_socks5 || user.user_proxy_ip];
+		}
+		if (!Array.isArray(proxyList) || proxyList.length === 0) proxyList = [null];
+
+		for (let locIdx = 0; locIdx < proxyList.length; locIdx++) {
+			let proxyItem = proxyList[locIdx];
+			let proxyStr = typeof proxyItem === "object" && proxyItem !== null ? proxyItem.proxy : proxyItem;
+			let countryCode = typeof proxyItem === "object" && proxyItem !== null ? proxyItem.country : (user.user_proxy_iata || "");
+			if (!countryCode && proxyStr) {
 				try {
-					while (true) {
-						const res = await reader.read();
-						if (res.done || !res.value) break;
-						resStr += new TextDecoder().decode(res.value, { stream: true });
-						if (resStr.includes("countryCode")) break;
-					}
-				} finally {
-					clearTimeout(timeoutId);
-					try { s.close(); } catch (e) {}
-				}
-				const jsonMatch = resStr.match(/\{[^}]*"countryCode"\s*:\s*"([^"]+)"[^}]*\}/);
-				if (jsonMatch && jsonMatch[1]) countryCode = jsonMatch[1];
-			} catch (e) {}
-			if (!countryCode) {
-				let ip = "";
-				let cleanProxy = proxy.replace(/^(socks4|socks5|socks|http|https):\/\//i, "");
-				let remain = cleanProxy;
-				if (remain.includes("@")) remain = remain.substring(remain.lastIndexOf("@") + 1);
-				if (remain.startsWith("[")) {
-					ip = remain.substring(1, remain.indexOf("]"));
-				} else {
-					const lastColon = remain.lastIndexOf(":");
-					if (lastColon !== -1 && remain.indexOf(":") === lastColon) ip = remain.substring(0, lastColon);
-					else ip = remain;
-				}
-				if (ip) {
+					const payload = new TextEncoder().encode("GET /json/?fields=countryCode HTTP/1.1\r\nHost: ip-api.com\r\nConnection: close\r\n\r\n");
+					const s = await connectProxy(proxyStr, "ip-api.com", 80, payload);
+					const reader = s.readable.getReader();
+					let resStr = "";
+					const timeoutId = setTimeout(() => { try { s.close(); } catch(e){} }, 2000);
 					try {
-						const geoRes = await fetch(`http://ip-api.com/json/${ip}?fields=countryCode`);
-						const geoData = await geoRes.json();
-						if (geoData && geoData.countryCode) countryCode = geoData.countryCode;
-					} catch (e) {}
+						while (true) {
+							const res = await reader.read();
+							if (res.done || !res.value) break;
+							resStr += new TextDecoder().decode(res.value, { stream: true });
+							if (resStr.includes("countryCode")) break;
+						}
+					} finally {
+						clearTimeout(timeoutId);
+						try { s.close(); } catch (e) {}
+					}
+					const jsonMatch = resStr.match(/\{[^}]*"countryCode"\s*:\s*"([^"]+)"[^}]*\}/);
+					if (jsonMatch && jsonMatch[1]) countryCode = jsonMatch[1];
+				} catch (e) {}
+				if (!countryCode) {
+					let ip = "";
+					let cleanProxy = proxyStr.replace(/^(socks4|socks5|socks|http|https):\/\//i, "");
+					let remain = cleanProxy;
+					if (remain.includes("@")) remain = remain.substring(remain.lastIndexOf("@") + 1);
+					if (remain.startsWith("[")) {
+						ip = remain.substring(1, remain.indexOf("]"));
+					} else {
+						const lastColon = remain.lastIndexOf(":");
+						if (lastColon !== -1 && remain.indexOf(":") === lastColon) ip = remain.substring(0, lastColon);
+						else ip = remain;
+					}
+					if (ip) {
+						try {
+							const geoRes = await fetch(`http://ip-api.com/json/${ip}?fields=countryCode`);
+							const geoData = await geoRes.json();
+							if (geoData && geoData.countryCode) countryCode = geoData.countryCode;
+						} catch (e) {}
+					}
 				}
 			}
-		}
-		let flagEmoji = "🌐";
-		if (countryCode) {
-			const codePoints = countryCode
-				.toUpperCase()
-				.split("")
-				.map((char) => 127397 + char.charCodeAt(0));
-			try {
-				flagEmoji = String.fromCodePoint(...codePoints);
-			} catch (e) {}
-		}
-		ips.forEach((ip) => {
-			ports.forEach((portStr) => {
-				const isTlsPort = ["443", "2053", "2083", "2087", "2096", "8443"].includes(portStr);
-				const tlsVal = isTlsPort ? "tls" : "none";
-				const userFrag = user.frag_len && user.frag_int ? "&fragment=" + user.frag_len + "," + user.frag_int : "";
-				const remark = "ZEUS | " + flagEmoji + " | " + user.username;
-				links.push("vl" + "e" + "ss://" + user.uuid + "@" + ip + ":" + portStr + "?path=" + dynPath + "&security=" + tlsVal + "&encryption=none&insecure=0&host=" + host + "&fp=" + fp + "&type=ws&allowInsecure=0&sni=" + host + userFrag + "#" + encodeURIComponent(remark));
+			let flagEmoji = "🌐";
+			if (countryCode) {
+				const codePoints = countryCode
+					.toUpperCase()
+					.split("")
+					.map((char) => 127397 + char.charCodeAt(0));
+				try {
+					flagEmoji = String.fromCodePoint(...codePoints);
+				} catch (e) {}
+			}
+			const currentDynPath = encodeURIComponent(rawPath + ((proxyList[0] !== null && proxyList[0] !== "") ? `?loc=${locIdx}` : ""));
+			ips.forEach((ip) => {
+				ports.forEach((portStr) => {
+					const isTlsPort = ["443", "2053", "2083", "2087", "2096", "8443"].includes(portStr);
+					const tlsVal = isTlsPort ? "tls" : "none";
+					const userFrag = user.frag_len && user.frag_int ? "&fragment=" + user.frag_len + "," + user.frag_int : "";
+					const remark = "ZEUS | " + flagEmoji + " | " + user.username;
+					links.push("vl" + "e" + "ss://" + user.uuid + "@" + ip + ":" + portStr + "?path=" + currentDynPath + "&security=" + tlsVal + "&encryption=none&insecure=0&host=" + host + "&fp=" + fp + "&type=ws&allowInsecure=0&sni=" + host + userFrag + "#" + encodeURIComponent(remark));
+				});
 			});
-		});
+		}
 		const noise = ["# System Update Feed: OK", "# Sync Code: " + Math.random().toString(36).slice(2, 10), "# Version: 2.10.1", "# Description: Secure Node Configurations", ""].join("\n");
 		const plainContent = noise + links.join("\n");
 		const subContent = btoa(unescape(encodeURIComponent(plainContent)));
@@ -1228,8 +1280,51 @@ async function flushExpiredTraffic(env) {
 		}
 	}
 }
+function getSelectedUserProxy(userSocks5, request) {
+	if (!userSocks5) return "";
+	let proxyList = [];
+	try {
+		if (userSocks5.trim().startsWith("[")) {
+			proxyList = JSON.parse(userSocks5);
+		} else {
+			proxyList = [userSocks5];
+		}
+	} catch (e) {
+		proxyList = [userSocks5];
+	}
+	if (!Array.isArray(proxyList) || proxyList.length === 0) return "";
+	let idx = 0;
+	if (request) {
+		try {
+			const url = new URL(request.url);
+			const locParam = url.searchParams.get("loc");
+			if (locParam !== null && !isNaN(locParam)) {
+				idx = parseInt(locParam, 10);
+			}
+		} catch (e) {}
+	}
+	const selected = proxyList[idx] || proxyList[0];
+	return typeof selected === "object" ? (selected.proxy || "") : String(selected || "");
+}
 async function handlevIees(env, storedData = null, ctx = null, request = null) {
-	const clientIP = request ? request.headers.get("CF-Connecting-IP") || "unknown" : "unknown";
+	let rawClientIP = request ? request.headers.get("CF-Connecting-IP") || "unknown" : "unknown";
+	let clientIP = rawClientIP;
+	
+	if (rawClientIP !== "unknown") {
+		if (rawClientIP.includes(':')) {
+			// IPv6: Group by /64
+			const parts = rawClientIP.split(':');
+			if (parts.length >= 4) {
+				clientIP = parts.slice(0, 4).join(':') + '::/64';
+			}
+		} else if (rawClientIP.includes('.')) {
+			// IPv4: Group by /24 (CGNAT Handling)
+			const parts = rawClientIP.split('.');
+			if (parts.length === 4) {
+				clientIP = parts.slice(0, 3).join('.') + '.0/24';
+			}
+		}
+	}
 	const socketPair = new WebSocketPair();
 	const [clientSock, serverSock] = Object.values(socketPair);
 	serverSock.accept();
@@ -1525,6 +1620,14 @@ async function handlevIees(env, storedData = null, ctx = null, request = null) {
 				serverSock.close();
 				return;
 			}
+			if (request) {
+				const reqUrl = new URL(request.url);
+				const expectedPath = "/stream/PANEL_ZEUS/" + (user.uuid ? user.uuid.split("-")[4] : "default");
+				if (reqUrl.pathname !== expectedPath) {
+					serverSock.close();
+					return;
+				}
+			}
 			username = user.username;
 			validUUID = reqUUID;
 			let currentReqs = USER_REQ_CACHE.get(username) || 0;
@@ -1677,7 +1780,7 @@ async function handlevIees(env, storedData = null, ctx = null, request = null) {
 					}
 					const task = (async () => {
 							let s = null;
-							const socks5 = user?.user_socks5 || "";
+							const socks5 = getSelectedUserProxy(user?.user_socks5, request);
 							if (socks5) {
 								try {
 									s = await connectProxy(socks5, addr, port, dataPayload);
@@ -2048,7 +2151,7 @@ function createUpstreamQueue({ getWriter, releaseWriter, retryConnect, closeConn
 				}
 				batchCount++;
 				if (batchCount >= 16) {
-					await new Promise((resolve) => setTimeout(resolve, 0));
+					await Promise.resolve();
 					batchCount = 0;
 				}
 			}
@@ -2060,7 +2163,7 @@ function createUpstreamQueue({ getWriter, releaseWriter, retryConnect, closeConn
 			} catch (_) {}
 		} finally {
 			draining = false;
-			if (!closed && head < chunks.length) setTimeout(drain, 0);
+			if (!closed && head < chunks.length) queueMicrotask(drain);
 			else resolveIdle();
 		}
 	};
@@ -2088,7 +2191,7 @@ function createUpstreamQueue({ getWriter, releaseWriter, retryConnect, closeConn
 		}
 		chunks.push({ chunk, allowRetry, completions });
 		queuedBytes = nextBytes;
-		if (!draining) setTimeout(drain, 0);
+		if (!draining) queueMicrotask(drain);
 		return waitForFlush ? completionPromise.then(() => true) : true;
 	};
 	return {
@@ -2106,22 +2209,30 @@ function createUpstreamQueue({ getWriter, releaseWriter, retryConnect, closeConn
 	};
 }
 function createDownstreamSender(webSocket, headerData = null) {
-	const packetCap = DOWNSTREAM_GRAIN_BYTES;
-	const tailBytes = DOWNSTREAM_GRAIN_TAIL_THRESHOLD;
-	const lowWaterBytes = Math.max(4096, tailBytes << 3);
+	const MAX_CAP = 128 * 1024;
+	const MIN_CAP = 8 * 1024;
+	let currentPacketCap = 32 * 1024;
+	const tailBytes = 512;
 	let header = headerData;
-	let pendingBuffer = new Uint8Array(packetCap);
+	let pendingBuffer = new Uint8Array(MAX_CAP);
 	let pendingBytes = 0;
-	let flushTimer = null;
-	let taskQueued = false;
-	let generation = 0;
-	let scheduledGeneration = 0;
-	let waitRounds = 0;
 	let flushPromise = null;
+	let microtaskQueued = false;
+
+	const adjustSmartBuffer = () => {
+		const buffered = webSocket.bufferedAmount || 0;
+		if (buffered > 256 * 1024) {
+			currentPacketCap = Math.max(MIN_CAP, Math.floor(currentPacketCap / 2));
+		} else if (buffered < 32 * 1024) {
+			currentPacketCap = Math.min(MAX_CAP, currentPacketCap * 2);
+		}
+	};
+
 	const sendRawChunk = async (chunk) => {
-		if (webSocket.readyState !== WebSocket.OPEN) throw new Error("ws.readyState is not open");
+		if (webSocket.readyState !== 1) throw new Error("ws.readyState is not open");
 		webSocket.send(chunk);
 	};
+
 	const attachResponseHeader = (chunk) => {
 		if (!header) return chunk;
 		const merged = new Uint8Array(header.length + chunk.byteLength);
@@ -2130,52 +2241,20 @@ function createDownstreamSender(webSocket, headerData = null) {
 		header = null;
 		return merged;
 	};
+
 	const flush = async () => {
+		microtaskQueued = false;
 		while (flushPromise) await flushPromise;
-		if (flushTimer) clearTimeout(flushTimer);
-		flushTimer = null;
-		taskQueued = false;
 		if (!pendingBytes) return;
-		const output = pendingBuffer.subarray(0, pendingBytes).slice();
-		pendingBuffer = new Uint8Array(packetCap);
+		const output = pendingBuffer.slice(0, pendingBytes);
+		adjustSmartBuffer();
 		pendingBytes = 0;
-		waitRounds = 0;
 		flushPromise = sendRawChunk(output).finally(() => {
 			flushPromise = null;
 		});
 		return flushPromise;
 	};
-	const scheduleFlush = () => {
-		if (flushTimer || taskQueued) return;
-		taskQueued = true;
-		scheduledGeneration = generation;
-		setTimeout(() => {
-			taskQueued = false;
-			if (!pendingBytes || flushTimer) return;
-			if (packetCap - pendingBytes < tailBytes) {
-				flush().catch(() => closeSocketQuietly(webSocket));
-				return;
-			}
-			flushTimer = setTimeout(
-				() => {
-					flushTimer = null;
-					if (!pendingBytes) return;
-					if (packetCap - pendingBytes < tailBytes) {
-						flush().catch(() => closeSocketQuietly(webSocket));
-						return;
-					}
-					if (waitRounds < 2 && (generation !== scheduledGeneration || pendingBytes < lowWaterBytes)) {
-						waitRounds++;
-						scheduledGeneration = generation;
-						scheduleFlush();
-						return;
-					}
-					flush().catch(() => closeSocketQuietly(webSocket));
-				},
-				Math.max(DOWNSTREAM_GRAIN_SILENT_MS, 1),
-			);
-		}, 0);
-	};
+
 	return {
 		async sendDirect(data) {
 			let chunk = convertToUint8Array(data);
@@ -2189,21 +2268,29 @@ function createDownstreamSender(webSocket, headerData = null) {
 			chunk = attachResponseHeader(chunk);
 			let offset = 0;
 			const totalBytes = chunk.byteLength;
+
 			while (offset < totalBytes) {
-				if (!pendingBytes && totalBytes - offset >= packetCap) {
-					const sendBytes = Math.min(packetCap, totalBytes - offset);
+				if (!pendingBytes && totalBytes - offset >= currentPacketCap) {
+					const sendBytes = Math.min(currentPacketCap, totalBytes - offset);
 					const view = offset || sendBytes !== totalBytes ? chunk.subarray(offset, offset + sendBytes) : chunk;
 					await sendRawChunk(view);
 					offset += sendBytes;
+					adjustSmartBuffer();
 					continue;
 				}
-				const copyBytes = Math.min(packetCap - pendingBytes, totalBytes - offset);
+				const copyBytes = Math.min(currentPacketCap - pendingBytes, totalBytes - offset);
 				pendingBuffer.set(chunk.subarray(offset, offset + copyBytes), pendingBytes);
 				pendingBytes += copyBytes;
 				offset += copyBytes;
-				generation++;
-				if (pendingBytes === packetCap || packetCap - pendingBytes < tailBytes) await flush();
-				else scheduleFlush();
+
+				if (pendingBytes >= currentPacketCap || currentPacketCap - pendingBytes < tailBytes) {
+					await flush();
+				} else if (!microtaskQueued) {
+					microtaskQueued = true;
+					queueMicrotask(() => {
+						if (pendingBytes) flush().catch(() => closeSocketQuietly(webSocket));
+					});
+				}
 			}
 		},
 		flush,
@@ -2214,7 +2301,7 @@ async function waitForBackpressure(ws) {
 		let maxAttempts = 300;
 		while (ws.bufferedAmount > 512 * 1024 && maxAttempts > 0) {
 			if (ws.readyState !== WebSocket.OPEN) break;
-			await new Promise((r) => setTimeout(r, 25));
+			await new Promise((r) => setTimeout(r, 5));
 			maxAttempts--;
 		}
 	}
@@ -2224,7 +2311,7 @@ async function connectStreams(remoteSocket, webSocket, headerData, retryFunc, on
 		hasData = false,
 		reader,
 		useBYOB = false;
-	const BYOB_LIMIT = 64 * 1024;
+	const BYOB_LIMIT = 128 * 1024;
 	const downstreamSender = createDownstreamSender(webSocket, header);
 	header = null;
 	try {
@@ -2578,7 +2665,14 @@ async function connectHttp(proxyStr, destAddr, destPort, initialData) {
 		throw e;
 	}
 }
-const COMMON_HEAD = `<script src="https://cdn.tailwindcss.com"></script>
+const COMMON_HEAD = `<script>
+	if (localStorage.getItem('color-theme') === 'light') {
+		document.documentElement.classList.remove('dark');
+	} else {
+		document.documentElement.classList.add('dark');
+	}
+</script>
+<script src="https://cdn.tailwindcss.com"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <link href="https://cdn.jsdelivr.net/gh/rastikerdar/vazirmatn@v33.003/Vazirmatn-font-face.css" rel="stylesheet" type="text/css" />
 <script>
@@ -3016,7 +3110,12 @@ const HTML_TEMPLATES = {
     <div class="bg-white dark:bg-amoled-card border border-gray-200 dark:border-amoled-border rounded-md p-2.5 shadow-sm flex flex-col justify-center gap-1 hover:shadow-md hover:border-emerald-400 dark:hover:border-emerald-500/50 transition duration-300 relative overflow-hidden group min-h-[64px]">
         <div class="absolute -right-4 -bottom-4 w-16 h-16 bg-emerald-500/10 rounded-full blur-xl group-hover:scale-150 transition duration-500"></div>
         <div class="flex items-center justify-between relative z-10">
-            <span class="text-[11px] sm:text-xs font-semibold text-gray-500 dark:text-zinc-400 whitespace-nowrap">کاربران فعال (آنلاین)</span>
+            <span class="text-[11px] sm:text-xs font-semibold text-gray-500 dark:text-zinc-400 whitespace-nowrap flex items-center gap-1">
+                <span>کاربران فعال (آنلاین)</span>
+                <button type="button" onclick="openOnlineCounterWarning();" class="text-red-500 hover:text-red-400 transition-transform hover:scale-110 cursor-pointer inline-flex items-center" title="هشدار">
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
+                </button>
+            </span>
             <div class="p-1 bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400 rounded-md flex-shrink-0">
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
             </div>
@@ -3112,11 +3211,26 @@ const HTML_TEMPLATES = {
                         <th class="p-2 border-r border-gray-200 dark:border-zinc-800">وضعیت</th>
                         <th class="p-2 border-r border-gray-200 dark:border-zinc-800">عملیات</th>
                         <th class="p-2 border-r border-gray-200 dark:border-zinc-800">لینک ساب</th>
+                        <th class="p-2 border-r border-gray-200 dark:border-zinc-800">
+                            <div class="flex items-center justify-center gap-1">
+                                <span>تعداد کانفیگ‌ها</span>
+                                <button type="button" onclick="openConfigCountWarning();" class="text-amber-500 hover:text-amber-400 transition-transform hover:scale-110 cursor-pointer inline-flex items-center" title="هشدار">
+                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
+                                </button>
+                            </div>
+                        </th>
                         <th class="p-2 border-r border-gray-200 dark:border-zinc-800">پورت</th>
                         <th class="p-2 border-r border-gray-200 dark:border-zinc-800">حجم</th>
                         <th class="p-2 border-r border-gray-200 dark:border-zinc-800">ریکوئست</th>
                         <th class="p-2 border-r border-gray-200 dark:border-zinc-800">زمان</th>
-                        <th class="p-2 border-r border-gray-200 dark:border-zinc-800">کاربران آنلاین</th>
+                        <th class="p-2 border-r border-gray-200 dark:border-zinc-800">
+                            <div class="flex items-center justify-center gap-1">
+                                <span>کاربران آنلاین</span>
+                                <button type="button" onclick="openOnlineCounterWarning();" class="text-red-500 hover:text-red-400 transition-transform hover:scale-110 cursor-pointer inline-flex items-center" title="هشدار">
+                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
+                                </button>
+                            </div>
+                        </th>
                     </tr>
                 </thead>
                 <tbody id="users-tbody" class="divide-y divide-gray-150 dark:divide-amoled-border text-sm"></tbody>
@@ -3163,6 +3277,39 @@ const HTML_TEMPLATES = {
         <div id="global-message-content" class="mb-6 w-full text-center">
         </div>
         <button id="global-message-close-btn" class="w-full py-3.5 bg-transparent border-2 border-blue-600 text-blue-700 hover:bg-blue-900/20 hover:text-blue-800 dark:border-blue-500 dark:text-blue-500 dark:hover:bg-blue-900/40 dark:hover:text-blue-400 font-black rounded-md text-sm transition duration-300 shadow-lg">
+            متوجه شدم
+        </button>
+    </div>
+</div>
+<div id="online-counter-warning-modal" class="fixed inset-0 z-[87] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm opacity-0 pointer-events-none transition-all duration-300 ease-out">
+    <div class="w-full max-w-md bg-white dark:bg-amoled-card border border-red-500/50 rounded-md shadow-2xl overflow-hidden p-6 text-center transition-all transform duration-300 opacity-0 scale-95 ease-out">
+        <div class="inline-flex items-center justify-center w-16 h-16 rounded-full bg-red-100 dark:bg-red-900/30 text-red-500 mb-4 shadow-inner">
+            <svg class="w-8 h-8 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
+        </div>
+        <h3 class="font-black text-xl text-gray-900 dark:text-white mb-2">هشدار شمارنده آنلاین</h3>
+        <p class="text-sm text-gray-600 dark:text-gray-400 mb-6 leading-relaxed font-medium">
+			به دلیل ماهیت ساختار کلودفلر، آمار شمارنده کاربران آنلاین با دقت مطلق محاسبه نمی‌شود؛ همچنین ارسال پینگ یا بررسی مداوم کانفیگ‌ها توسط کلاینت ممکن است به صورت موقت منجر به نمایش افزایش کاذب تعداد کاربران فعال گردد.        </p>
+        <button onclick="closeOnlineCounterWarning()" class="w-full py-3.5 bg-transparent border-2 border-red-600 text-red-700 hover:bg-red-900/20 hover:text-red-800 dark:border-red-500 dark:text-red-500 dark:hover:bg-red-900/40 dark:hover:text-red-400 font-black rounded-md text-sm transition duration-300 shadow-lg">
+            متوجه شدم
+        </button>
+    </div>
+</div>
+<div id="config-count-warning-modal" class="fixed inset-0 z-[88] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm opacity-0 pointer-events-none transition-all duration-300 ease-out">
+    <div class="w-full max-w-md bg-white dark:bg-amoled-card border border-amber-500/50 rounded-md shadow-2xl overflow-hidden p-6 text-center transition-all transform duration-300 opacity-0 scale-95 ease-out">
+        <div class="inline-flex items-center justify-center w-16 h-16 rounded-full bg-amber-100 dark:bg-amber-900/30 text-amber-500 mb-4 shadow-inner">
+            <svg class="w-8 h-8 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+        </div>
+        <h3 class="font-black text-xl text-gray-900 dark:text-white mb-3">محاسبه تعداد کانفیگ‌ها</h3>
+        <p class="text-sm text-gray-600 dark:text-gray-400 mb-4 leading-relaxed font-medium">
+            تعداد کل کانفیگ‌های ساخته شده برای هر کاربر، دقیقاً از این فرمول به دست می‌آید:
+        </p>
+        <div class="bg-gray-50 dark:bg-zinc-800/50 border border-gray-200 dark:border-zinc-700 rounded-md p-3 mb-4 text-xs font-bold text-gray-800 dark:text-zinc-200 text-center shadow-inner" dir="rtl">
+            تعداد کل = (تعداد پروکسی ها) × (تعداد آی‌پی تمیز) × (تعداد پورت)
+        </div>
+        <div class="text-[11px] text-amber-700 dark:text-amber-500 mb-6 leading-relaxed font-bold bg-amber-50 dark:bg-amber-950/20 p-3 rounded text-right border border-amber-200 dark:border-amber-900/50">
+            ⚠️ <b>توصیه مهم:</b> برای جلوگیری از طولانی شدن لیست کانفیگ‌ها و در نتیجه سنگین شدن و هنگ کردن نرم‌افزار کاربر، پیشنهاد می‌شود پورت‌های کمتری انتخاب کنید و تعداد آی‌پی‌های تمیز را در حد معقول نگه دارید.
+        </div>
+        <button onclick="closeConfigCountWarning()" class="w-full py-3.5 bg-transparent border-2 border-amber-600 text-amber-700 hover:bg-amber-900/20 hover:text-amber-800 dark:border-amber-500 dark:text-amber-500 dark:hover:bg-amber-900/40 dark:hover:text-amber-400 font-black rounded-md text-sm transition duration-300 shadow-lg">
             متوجه شدم
         </button>
     </div>
@@ -3224,7 +3371,12 @@ const HTML_TEMPLATES = {
                                     </div>
                                 </div>
                                 <div>
-                                    <label class="block text-[10px] font-bold text-gray-500 dark:text-zinc-400 mb-1 uppercase tracking-wider">محدودیت کاربر</label>
+                                    <label class="block text-[10px] font-bold text-gray-500 dark:text-zinc-400 mb-1 uppercase tracking-wider flex items-center gap-1">
+                                        <span>محدودیت کاربر</span>
+                                        <button type="button" onclick="event.preventDefault(); event.stopPropagation(); openOnlineCounterWarning();" class="text-red-500 hover:text-red-400 transition-transform hover:scale-110 cursor-pointer inline-flex items-center" title="هشدار">
+                                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
+                                        </button>
+                                    </label>
                                     <div class="relative">
                                         <span class="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none text-gray-400">
                                             <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path></svg>
@@ -3348,33 +3500,33 @@ const HTML_TEMPLATES = {
                                     <input type="checkbox" id="user-proxy-mode-toggle" onchange="toggleUserProxyMode(this.checked)" class="sr-only peer">
                                     <div class="w-7 h-4 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-zinc-700 peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:right-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all dark:border-gray-600 peer-checked:bg-green-700"></div>
                                 </label>
-                                <label class="block text-xs sm:text-sm font-bold text-gray-700 dark:text-zinc-300 cursor-pointer truncate" onclick="document.getElementById('user-proxy-mode-toggle').click()">ثابت کردن کشور و آیپی با تنظیم پـروکـسـی </label>
+                                <label class="block text-xs sm:text-sm font-bold text-gray-700 dark:text-zinc-300 cursor-pointer truncate" onclick="document.getElementById('user-proxy-mode-toggle').click()">تنظیم کشور و ثابت کردن آیپی</label>
                             </div>
                             <div class="grid grid-cols-2 gap-2 mb-2 w-full">
                                 <button type="button" onclick="toggleDonateModal(true)" class="text-[11px] bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 px-2 py-2 rounded border border-emerald-200 dark:border-emerald-800 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 transition font-black shadow-sm text-center whitespace-nowrap">اهدای پـروکـسـی شخصی ❤️</button>
                                 <a href="https://github.com/zeus-panel/ZEUS-PANEL#%EF%B8%8F-build-your-own-socks5-proxy-zeus-relay" target="_blank" class="text-[11px] bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 px-2 py-2 rounded border border-blue-200 dark:border-blue-800 hover:bg-blue-100 dark:hover:bg-blue-900/50 transition font-black shadow-sm text-center whitespace-nowrap">ساخت پـروکـسـی شخصی</a>
                             </div>
-                            <div class="mb-2 p-2 border-2 border-dashed border-red-500 bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400 rounded-md text-[11px] font-bold leading-relaxed text-center w-full shadow-[0_0_15px_rgba(239,68,68,0.6)]" style="animation: pulse 1s cubic-bezier(0.4, 0, 0.6, 1) infinite, alertShake 2s infinite;">
+                            <div class="mb-3 p-2 border-2 border-dashed border-red-500 bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400 rounded-md text-[11px] font-bold leading-relaxed text-center w-full shadow-[0_0_15px_rgba(239,68,68,0.6)]" style="animation: pulse 1s cubic-bezier(0.4, 0, 0.6, 1) infinite, alertShake 2s infinite;">
                                 <style>@keyframes alertShake { 0%, 100% {transform: translateX(0);} 2%, 6%, 10% {transform: translateX(-3px);} 4%, 8%, 12% {transform: translateX(3px);} 14% {transform: translateX(0);} }</style>
-                                سایت‌هایی مثل <span class="text-emerald-600 dark:text-emerald-400 font-black">ChatGPT</span> و <span class="text-amber-600 dark:text-amber-400 font-black">Claude</span> پشت کلودفلر هستند؛ برای باز کردن این سایت‌ها حتماً باید <span class="text-blue-600 dark:text-blue-400 font-black">پـروکـسـی</span> تنظیم کنید.
+                                سایت‌هایی مثل <span class="text-emerald-600 dark:text-emerald-400 font-black">ChatGPT</span>، <span class="text-amber-600 dark:text-amber-400 font-black">Claude</span> و <span class="text-purple-600 dark:text-purple-400 font-black">Speedtest</span> پشت کلودفلر هستند؛ برای باز کردن این سایت‌ها حتماً باید <span class="text-blue-600 dark:text-blue-400 font-black">پـروکـسـی</span> تنظیم کنید.
                             </div>
-                            <div class="relative transition-opacity duration-300 opacity-50 pointer-events-none flex-1 flex flex-col justify-start" id="user-socks5-container">
-                                <input type="text" id="user-socks5-input" placeholder="socks5:// یا http:// یا (user:pass@ip:port)" dir="ltr" class="w-full px-3 py-2.5 bg-gray-50 dark:bg-amoled-input border border-gray-200 dark:border-amoled-border rounded-md text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-800 dark:text-zinc-100 transition" disabled>
-                                <div class="w-full text-center">
-                                    <span id="test-user-proxy-result" class="inline-block mt-2 text-[11px] font-bold transition-colors break-words leading-relaxed empty:hidden"></span>
+                            <div class="relative transition-opacity duration-300 opacity-50 pointer-events-none flex-1 flex flex-col justify-start gap-2" id="user-socks5-container">
+                                <div id="proxies-fields-wrapper" class="flex flex-col gap-2 w-full"></div>
+                                <button type="button" id="add-proxy-field-btn" onclick="addProxyFieldUI()" class="w-full py-1.5 bg-green-50 dark:bg-green-950/30 border border-green-500 text-green-600 dark:text-green-400 hover:bg-green-100 dark:hover:bg-green-900/50 rounded text-xs font-black transition flex items-center justify-center gap-1 shadow-sm">
+                                    <span>+ افزودن کشور</span>
+                                </button>
+                                <div class="flex items-center justify-between w-full gap-2 mt-1">
+                                    <button type="button" onclick="testUserSocksProxy()" id="test-user-proxy-btn" class="flex-1 text-center text-[11px] bg-sky-50 dark:bg-sky-900/30 text-sky-600 dark:text-sky-400 py-2 rounded border border-sky-200 dark:border-sky-800 hover:bg-sky-100 dark:hover:bg-sky-900/50 transition font-bold shadow-sm">تست پـروکـسـی</button>
+                                    <button type="button" onclick="openProxySelectorModal()" class="flex-1 text-center text-[11px] bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 py-2 rounded border border-amber-200 dark:border-amber-800 hover:bg-amber-100 dark:hover:bg-amber-900/50 transition font-bold shadow-sm">مخزن پـروکـسـی</button>
                                 </div>
-                                <div class="mt-2 flex items-center justify-between w-full gap-2">
-                                    <button type="button" onclick="testUserSocksProxy()" id="test-user-proxy-btn" class="flex-1 text-center text-[11px] bg-sky-50 dark:bg-sky-900/30 text-sky-600 dark:text-sky-400 py-1.5 rounded border border-sky-200 dark:border-sky-800 hover:bg-sky-100 dark:hover:bg-sky-900/50 transition font-bold shadow-sm">تست پـروکـسـی</button>
-                                    <button type="button" onclick="openProxySelectorModal()" class="flex-1 text-center text-[11px] bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 py-1.5 rounded border border-amber-200 dark:border-amber-800 hover:bg-amber-100 dark:hover:bg-amber-900/50 transition font-bold shadow-sm">مخزن پـروکـسـی</button>
-                                </div>
-                                <div class="mt-2 flex items-center justify-between border border-gray-100 dark:border-amoled-border p-3 rounded-md bg-gray-50 dark:bg-amoled-input">
-                                    <div class="flex items-center gap-2">
-                                        <svg class="w-4 h-4 text-gray-500 dark:text-zinc-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
-                                        <span class="text-[11px] font-bold text-gray-500 dark:text-zinc-400 uppercase tracking-wider">تعویض خودکار پـروکـسـی (پیشنهادی)</span>
+                                <div class="flex items-center justify-between border border-gray-100 dark:border-amoled-border p-3 rounded-md bg-gray-50 dark:bg-amoled-input mt-1">
+                                    <div class="flex items-center gap-1.5">
+                                        <svg class="w-3.5 h-3.5 text-gray-500 dark:text-zinc-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+                                        <span class="text-[10px] font-bold text-gray-500 dark:text-zinc-400 uppercase tracking-wider">تعویض خودکار پـروکـسـی (پیشنهادی)</span>
                                     </div>
                                     <label class="relative inline-flex items-center cursor-pointer select-none">
                                         <input type="checkbox" id="input-auto-rotate-user-proxy" class="sr-only peer">
-                                        <div class="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-zinc-700 peer-checked:bg-green-600 transition-colors after:content-[''] after:absolute after:top-[2px] after:right-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-transform peer-checked:after:-translate-x-[18px]"></div>
+                                        <div class="w-8 h-4 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-zinc-700 peer-checked:bg-green-600 transition-colors after:content-[''] after:absolute after:top-[2px] after:right-[2px] after:bg-white after:rounded-full after:h-3 after:w-3 after:transition-transform peer-checked:after:-translate-x-[16px]"></div>
                                     </label>
                                 </div>
                             </div>
@@ -3413,7 +3565,7 @@ const HTML_TEMPLATES = {
                 </div>
                 <div class="flex flex-col gap-2 border-t border-gray-100 dark:border-zinc-800/60 pt-3 mt-2">
                     <div class="flex items-center justify-between">
-                        <span class="text-xs font-bold text-gray-700 dark:text-zinc-300">تعویض خودکار آیپی</span>
+                        <span class="text-xs font-bold text-gray-700 dark:text-zinc-300">تعویض خودکار آیپی(توصیه میشود)</span>
                         <label class="relative inline-flex items-center cursor-pointer select-none">
                             <input type="checkbox" id="input-auto-rotate-ip-toggle" onchange="toggleAutoRotateIpInputs(this.checked)" class="sr-only peer">
                             <div class="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-zinc-700 peer-checked:bg-green-600 transition-colors after:content-[''] after:absolute after:top-[2px] after:right-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-transform peer-checked:after:-translate-x-[18px]"></div>
@@ -4068,10 +4220,9 @@ ${COMMON_TOAST_HTML}
             const userProxyToggle = document.getElementById('user-proxy-mode-toggle');
             if (userProxyToggle) userProxyToggle.checked = false;
             if (typeof window.toggleUserProxyMode === 'function') window.toggleUserProxyMode(false);
-            const userSocksInput = document.getElementById('user-socks5-input');
-            if (userSocksInput) userSocksInput.value = '';
-            const userProxyResult = document.getElementById('test-user-proxy-result');
-            if (userProxyResult) userProxyResult.innerText = '';
+            window.proxyFieldsData = [""];
+            window.activeProxyIndex = 0;
+            if (typeof window.renderProxyFieldsUI === 'function') window.renderProxyFieldsUI();
 			document.getElementById('hidden-auto-rotate').value = '0';
 			document.getElementById('hidden-rotate-time').value = '';
 			document.getElementById('hidden-ip-operator').value = 'all';
@@ -4079,11 +4230,6 @@ ${COMMON_TOAST_HTML}
             toggleModal(true);
         }
         const themeToggleBtn = document.getElementById('theme-toggle');
-		if (localStorage.getItem('color-theme') === 'light') {
-    		document.documentElement.classList.remove('dark');
-		} else {
-    		document.documentElement.classList.add('dark');
-		}
         themeToggleBtn.addEventListener('click', () => {
             if (document.documentElement.classList.contains('dark')) {
                 document.documentElement.classList.remove('dark');
@@ -4435,26 +4581,64 @@ ${COMMON_TOAST_HTML}
                     let locBadge = '';
                     if (user.user_proxy_iata) {
                         const iata = user.user_proxy_iata.toUpperCase();
-                        locBadge = '<span title="کشور: ' + iata + '" class="text-base leading-none px-0.5 drop-shadow-[0_0_2px_rgba(0,0,0,0.3)] dark:drop-shadow-[0_0_2px_rgba(255,255,255,0.3)]">🌐</span>';
+                        const flag = typeof getFlagEmoji === 'function' ? getFlagEmoji(iata) : '🌐';
+                        locBadge = '<span title="کشور: ' + iata + '" class="text-base leading-none px-0.5 drop-shadow-[0_0_2px_rgba(0,0,0,0.3)] dark:drop-shadow-[0_0_2px_rgba(255,255,255,0.3)]">' + flag + '</span>';
                     } else if (user.user_socks5 || user.user_proxy_ip) {
-                        const targetProxy = user.user_socks5 || user.user_proxy_ip;
-                        const cachedFlag = proxyFlagCache[targetProxy];
-                        if (cachedFlag) {
-                            locBadge = '<span title="پـروکـسـی اختصاصی" class="text-base leading-none px-0.5 drop-shadow-[0_0_2px_rgba(0,0,0,0.3)] dark:drop-shadow-[0_0_2px_rgba(255,255,255,0.3)]">' + cachedFlag + '</span>';
-                        } else {
-                            locBadge = '<span data-proxy="' + targetProxy + '" title="پـروکـسـی اختصاصی" class="async-proxy-flag text-base leading-none px-0.5 drop-shadow-[0_0_2px_rgba(0,0,0,0.3)] dark:drop-shadow-[0_0_2px_rgba(255,255,255,0.3)]">⏳</span>';
+                        let proxyList = [];
+                        try {
+                            if (user.user_socks5 && user.user_socks5.trim().startsWith("[")) {
+                                proxyList = JSON.parse(user.user_socks5);
+                            } else {
+                                proxyList = [user.user_socks5 || user.user_proxy_ip];
+                            }
+                        } catch(e) {
+                            proxyList = [user.user_socks5 || user.user_proxy_ip];
                         }
+                        let flagSizeClass = proxyList.length > 4 ? 'text-[10px]' : (proxyList.length > 2 ? 'text-xs' : 'text-base');
+                        locBadge = proxyList.map(item => {
+                            const targetProxy = typeof item === 'object' && item !== null ? item.proxy : item;
+                            const targetCountry = typeof item === 'object' && item !== null ? item.country : null;
+                            if (targetCountry && typeof getFlagEmoji === 'function') {
+                                return '<span title="کشور: ' + targetCountry + '" class="' + flagSizeClass + ' leading-none px-0.5 drop-shadow-[0_0_2px_rgba(0,0,0,0.3)] dark:drop-shadow-[0_0_2px_rgba(255,255,255,0.3)]">' + getFlagEmoji(targetCountry) + '</span>';
+                            }
+                            const cachedFlag = proxyFlagCache[targetProxy];
+                            if (cachedFlag) {
+                                return '<span title="پـروکـسـی اختصاصی" class="' + flagSizeClass + ' leading-none px-0.5 drop-shadow-[0_0_2px_rgba(0,0,0,0.3)] dark:drop-shadow-[0_0_2px_rgba(255,255,255,0.3)]">' + cachedFlag + '</span>';
+                            } else {
+                                return '<span data-proxy="' + targetProxy + '" title="پـروکـسـی اختصاصی" class="async-proxy-flag ' + flagSizeClass + ' leading-none px-0.5 drop-shadow-[0_0_2px_rgba(0,0,0,0.3)] dark:drop-shadow-[0_0_2px_rgba(255,255,255,0.3)]">⏳</span>';
+                            }
+                        }).join('');
                     }
+					let numProxies = 1;
+					try {
+					    if (user.user_socks5 && user.user_socks5.trim().startsWith("[")) {
+					        numProxies = Math.max(1, JSON.parse(user.user_socks5).length);
+					    }
+					} catch(e) {}
+                    let numIps = user.ips ? user.ips.split('\\n').filter(function(ip) { return ip.trim().length > 0; }).length : 1;
+                    let numPorts = String(user.port || '443').split(',').filter(function(p) { return p.trim().length > 0; }).length;
+                    if (numPorts === 0) numPorts = 1;
+                    let totalConfigs = numProxies * numIps * numPorts;
+
+                    let configColorClass = 'text-green-800 dark:text-green-700';
+                    if (totalConfigs > 100) configColorClass = 'text-red-600 dark:text-red-500';
+                    else if (totalConfigs > 80) configColorClass = 'text-orange-500';
+                    else if (totalConfigs > 50) configColorClass = 'text-amber-500';
+                    else if (totalConfigs > 20) configColorClass = 'text-green-500';
+
+                    let configsCountHtml = '<span class="font-black text-base ' + configColorClass + '" dir="ltr">' + totalConfigs + '</span>';
                     return '<tr class="hover:bg-gray-50 dark:hover:bg-zinc-900/40 border-b border-gray-100 dark:border-zinc-800 last:border-0">' +
                             '<td class="p-1 border-r border-gray-100 dark:border-zinc-800 text-center select-none">' +
                                 '<input type="checkbox" name="select-user" value="' + encodeURIComponent(user.username) + '" onchange="onUserSelectChange(this)" ' + isChecked + ' class="w-4 h-4 rounded-md border-2 border-gray-300 dark:border-zinc-700 text-blue-600 bg-white dark:bg-zinc-800 checked:bg-blue-600 checked:border-blue-600 focus:ring-blue-500/50 focus:ring-offset-0 transition-all duration-200 cursor-pointer hover:scale-105 active:scale-95">' +
                             '</td>' +
                             '<td class="p-1 border-r border-gray-100 dark:border-zinc-800 text-center">' +
-                                '<div class="flex flex-col items-center justify-center gap-1 w-full max-w-[120px] mx-auto select-none">' +
-                                    '<span class="font-bold text-gray-900 dark:text-zinc-100 text-xs truncate max-w-full pb-0.5">' + user.username + '</span>' +
-                                    '<div class="flex flex-row items-center justify-center gap-1 whitespace-nowrap">' +
-                                        (!isEffectivelyActive ? '<span class="px-1 py-px text-[9px] font-medium bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400 rounded">غیرفعال</span>' : '<span class="px-1 py-px text-[9px] font-medium bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400 rounded">فعال</span>') +
+                                '<div class="flex flex-col items-center justify-center gap-1.5 w-full max-w-[120px] mx-auto select-none">' +
+                                    '<span class="font-bold text-gray-900 dark:text-zinc-100 text-xs truncate max-w-full leading-none">' + user.username + '</span>' +
+                                    '<div class="flex flex-wrap items-center justify-center gap-0.5">' +
                                         locBadge +
+                                    '</div>' +
+                                    '<div class="flex flex-row items-center justify-center gap-1">' +
+                                        (!isEffectivelyActive ? '<span class="px-1 py-px text-[9px] font-medium bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400 rounded">غیرفعال</span>' : '<span class="px-1 py-px text-[9px] font-medium bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400 rounded">فعال</span>') +
                                         (user.is_online === 1 ? '<span class="px-1 py-px text-[9px] font-medium bg-green-600 text-white rounded animate-pulse" dir="rtl">' + user.online_count + '</span>' : '<span class="px-1 py-px text-[9px] font-medium bg-gray-200 text-gray-600 dark:bg-zinc-800 dark:text-zinc-400 rounded">آفلاین</span>') +
                                     '</div>' +
                                 '</div>' +
@@ -4484,7 +4668,8 @@ ${COMMON_TOAST_HTML}
 							        '</div>' +
 							    '</div>' +
 							'</td>' +
-							'<td class="p-1 border-r border-gray-100 dark:border-zinc-800 text-xs">' + 
+							'<td class="p-1 border-r border-gray-100 dark:border-zinc-800 text-center">' + configsCountHtml + '</td>' +
+							'<td class="p-1 border-r border-gray-100 dark:border-zinc-800 text-xs">' +
 							    '<div class="grid grid-flow-col grid-rows-3 gap-1 w-max mx-auto">' +
 							        String(user.port || "").split(",").map(function(p) {
 							            p = p.trim();
@@ -4602,8 +4787,15 @@ ${COMMON_TOAST_HTML}
             const ip_operator = document.getElementById('hidden-ip-operator').value || 'all';
             const ip_count = parseInt(document.getElementById('hidden-ip-count').value) || 20;
             const userProxyMode = document.getElementById('user-proxy-mode-toggle') ? document.getElementById('user-proxy-mode-toggle').checked : false;
-            const userSocksVal = document.getElementById('user-socks5-input') ? document.getElementById('user-socks5-input').value.trim() : null;
-            const userSocks5 = (userProxyMode && userSocksVal !== "") ? userSocksVal : null;
+            let userSocks5 = null;
+            if (userProxyMode && window.proxyFieldsData && window.proxyFieldsData.length > 0) {
+                const cleanProxies = window.proxyFieldsData.map(p => p ? p.trim() : "").filter(p => p !== "");
+                if (cleanProxies.length === 1) {
+                    userSocks5 = cleanProxies[0];
+                } else if (cleanProxies.length > 1) {
+                    userSocks5 = JSON.stringify(cleanProxies);
+                }
+            }
             const auto_rotate_user_proxy = document.getElementById('input-auto-rotate-user-proxy') ? (document.getElementById('input-auto-rotate-user-proxy').checked ? 1 : 0) : 0;
             if (checkedPorts.length === 0) {
                 alert('⚠️ لطفا حداقل یک پورت را برای اتصال انتخاب کنید!');
@@ -4649,6 +4841,79 @@ ${COMMON_TOAST_HTML}
                 submitButton.innerText = isEditMode ? 'ذخیره تغییرات' : 'ایجاد کاربر';
             }
         }
+window.activeProxyIndex = 0;
+window.proxyFieldsData = [""];
+
+window.renderProxyFieldsUI = function() {
+    const wrapper = document.getElementById("proxies-fields-wrapper");
+    const addBtn = document.getElementById("add-proxy-field-btn");
+    if (!wrapper) return;
+    wrapper.innerHTML = "";
+    window.proxyFieldsData.forEach((val, idx) => {
+        const isFocused = idx === window.activeProxyIndex;
+        const borderClass = isFocused ? "ring-2 ring-blue-500 border-blue-500" : "border-gray-200 dark:border-amoled-border";
+        const row = document.createElement("div");
+        row.className = "flex flex-col gap-0.5 w-full";
+        let inputRow = '<div class="flex items-center gap-1 w-full">' +
+            '<input type="text" value="' + (val || "") + '" onfocus="setActiveProxyField(' + idx + ')" onclick="setActiveProxyField(' + idx + ')" oninput="updateProxyFieldData(' + idx + ', this.value)" placeholder="socks5:// یا http:// (کشور ' + (idx + 1) + ')" dir="ltr" class="flex-1 px-2 py-1.5 bg-gray-50 dark:bg-amoled-input border ' + borderClass + ' rounded text-xs font-mono focus:outline-none text-gray-800 dark:text-zinc-100 transition">';
+        if (idx > 0) {
+            inputRow += '<button type="button" onclick="removeProxyFieldUI(' + idx + ')" class="w-7 h-7 flex-shrink-0 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 hover:bg-red-100 rounded flex items-center justify-center font-bold text-xs shadow-sm" title="حذف">✕</button>';
+        }
+        inputRow += '</div><span id="proxy-ping-label-' + idx + '" class="text-[10px] font-bold text-center empty:hidden transition-colors"></span>';
+        row.innerHTML = inputRow;
+        wrapper.appendChild(row);
+    });
+    if (addBtn) {
+        addBtn.style.display = window.proxyFieldsData.length >= 5 ? "none" : "flex";
+    }
+};
+
+window.setActiveProxyField = function(idx) {
+    if (window.activeProxyIndex === idx) return;
+    window.activeProxyIndex = idx;
+    const wrapper = document.getElementById("proxies-fields-wrapper");
+    if (wrapper) {
+        const inputs = wrapper.querySelectorAll("input[type='text']");
+        inputs.forEach((inp, i) => {
+            if (i === idx) {
+                inp.classList.remove("border-gray-200", "dark:border-amoled-border");
+                inp.classList.add("ring-2", "ring-blue-500", "border-blue-500");
+            } else {
+                inp.classList.remove("ring-2", "ring-blue-500", "border-blue-500");
+                inp.classList.add("border-gray-200", "dark:border-amoled-border");
+            }
+        });
+    }
+};
+
+window.updateProxyFieldData = function(idx, val) {
+    window.proxyFieldsData[idx] = val;
+};
+
+window.addProxyFieldUI = function() {
+    if (window.proxyFieldsData.length < 5) {
+        window.proxyFieldsData.push("");
+        window.activeProxyIndex = window.proxyFieldsData.length - 1;
+        window.renderProxyFieldsUI();
+        setTimeout(() => {
+            const wrapper = document.getElementById("proxies-fields-wrapper");
+            if (wrapper) {
+                const inputs = wrapper.querySelectorAll("input[type='text']");
+                if (inputs[window.activeProxyIndex]) inputs[window.activeProxyIndex].focus();
+            }
+        }, 10);
+    }
+};
+
+window.removeProxyFieldUI = function(idx) {
+    if (window.proxyFieldsData.length > 1) {
+        window.proxyFieldsData.splice(idx, 1);
+        if (window.activeProxyIndex >= window.proxyFieldsData.length) {
+            window.activeProxyIndex = window.proxyFieldsData.length - 1;
+        }
+        window.renderProxyFieldsUI();
+    }
+};
 function setModalState(modalId, show) {
 			const modal = document.getElementById(modalId);
 			if (!modal) return;
@@ -4668,6 +4933,10 @@ function setModalState(modalId, show) {
 		function closeUsageWarning() { setModalState('usage-warning-modal', false); }
 		function openUsageWarning() { setModalState('usage-warning-modal', true); }
 		function closeFreePanelWarning() { setModalState('free-panel-warning-modal', false); }
+		function closeOnlineCounterWarning() { setModalState('online-counter-warning-modal', false); }
+		function openOnlineCounterWarning() { setModalState('online-counter-warning-modal', true); }
+		function closeConfigCountWarning() { setModalState('config-count-warning-modal', false); }
+		function openConfigCountWarning() { setModalState('config-count-warning-modal', true); }
 	async function checkGlobalMessage() {
         try {
             const res = await fetchWithFallbackUI('message.txt?t=' + Date.now());
@@ -4823,15 +5092,26 @@ function editUser(encodedUsername) {
 	const targetProxy = user.user_socks5 || user.user_proxy_ip;
 	const userProxyResult = document.getElementById('test-user-proxy-result');
 	if (userProxyResult) userProxyResult.innerText = '';
-	if (targetProxy) {
+	window.proxyFieldsData = [""];
+	window.activeProxyIndex = 0;
+	if (user.user_socks5) {
 		if (userProxyToggle) userProxyToggle.checked = true;
 		if (typeof window.toggleUserProxyMode === 'function') window.toggleUserProxyMode(true);
-		if (userSocksInput) userSocksInput.value = targetProxy;
+		try {
+			if (user.user_socks5.trim().startsWith("[")) {
+				const arr = JSON.parse(user.user_socks5);
+				window.proxyFieldsData = arr.map(x => typeof x === "object" && x !== null ? x.proxy : x);
+			} else {
+				window.proxyFieldsData = [user.user_socks5];
+			}
+		} catch(e) {
+			window.proxyFieldsData = [user.user_socks5];
+		}
 	} else {
 		if (userProxyToggle) userProxyToggle.checked = false;
 		if (typeof window.toggleUserProxyMode === 'function') window.toggleUserProxyMode(false);
-		if (userSocksInput) userSocksInput.value = '';
 	}
+	if (typeof window.renderProxyFieldsUI === 'function') window.renderProxyFieldsUI();
 	toggleModal(true);
 }
         async function deleteUser(encodedUsername) {
@@ -4914,17 +5194,20 @@ async function loadProxyFlags() {
     }
 }
 async function testUserSocksProxy() {
+	const idx = window.activeProxyIndex || 0;
 	const btn = document.getElementById('test-user-proxy-btn');
-	const resultSpan = document.getElementById('test-user-proxy-result');
-	const proxyStr = document.getElementById('user-socks5-input').value.trim();
+	const resultSpan = document.getElementById('proxy-ping-label-' + idx);
+	const proxyStr = (window.proxyFieldsData[idx] || "").trim();
 	if (!proxyStr) {
-		resultSpan.innerText = 'وارد نشده!';
-		resultSpan.className = 'text-[11px] font-bold text-red-500 w-full mt-1';
+		if (resultSpan) {
+			resultSpan.innerText = 'وارد نشده!';
+			resultSpan.className = 'text-[10px] font-bold text-red-500 block mt-0.5';
+		}
 		return;
 	}
 	btn.disabled = true;
 	btn.innerText = 'صبر کنید...';
-	resultSpan.innerText = '';
+	if (resultSpan) resultSpan.innerText = 'در حال تست...';
 	const controller = new AbortController();
 	const timeoutId = setTimeout(() => controller.abort(), 5000);
 	try {
@@ -4938,17 +5221,23 @@ async function testUserSocksProxy() {
 		const data = await res.json();
 		if (res.ok && data.success) {
 			const flag = typeof getFlagEmoji === 'function' ? getFlagEmoji(data.country) : '🌐';
-			resultSpan.innerText = flag + ' پینگ: ' + data.ping + 'ms';
-			resultSpan.className = 'text-[11px] font-bold text-green-600';
+			if (resultSpan) {
+				resultSpan.innerText = flag + ' پینگ: ' + data.ping + 'ms';
+				resultSpan.className = 'text-[10px] font-bold text-green-600 block mt-0.5';
+			}
 		} else {
-			resultSpan.innerText = 'خطا: ' + (data.error || 'ناموفق');
-			resultSpan.className = 'text-[11px] font-bold text-red-500 w-full mt-1 break-words';
+			if (resultSpan) {
+				resultSpan.innerText = 'خطا: ' + (data.error || 'ناموفق');
+				resultSpan.className = 'text-[10px] font-bold text-red-500 block mt-0.5 break-words';
+			}
 		}
 	} catch (e) {
 		clearTimeout(timeoutId);
-		if (e.name === 'AbortError') resultSpan.innerText = 'تایم‌اوت (پـروکـسـی خراب است)';
-		else resultSpan.innerText = 'خطا در ارتباط';
-		resultSpan.className = 'text-[11px] font-bold text-red-500 w-full mt-1 break-words';
+		if (resultSpan) {
+			if (e.name === 'AbortError') resultSpan.innerText = 'تایم‌اوت (خراب)';
+			else resultSpan.innerText = 'خطا در ارتباط';
+			resultSpan.className = 'text-[10px] font-bold text-red-500 block mt-0.5';
+		}
 	} finally {
 		btn.disabled = false;
 		btn.innerText = 'تست پـروکـسـی';
@@ -5061,7 +5350,17 @@ async function testUserSocksProxy() {
                                             block_porn: u.block_porn,
                                             block_ads: u.block_ads,
                                             frag_len: u.frag_len,
-                                            frag_int: u.frag_int
+                                            frag_int: u.frag_int,
+                                            user_proxy_iata: u.user_proxy_iata,
+                                            user_socks5: u.user_socks5,
+                                            user_proxy_ip: u.user_proxy_ip,
+                                            auto_reset_vol_days: u.auto_reset_vol_days,
+                                            auto_reset_req_days: u.auto_reset_req_days,
+                                            auto_rotate_ip: u.auto_rotate_ip,
+                                            rotate_time: u.rotate_time,
+                                            ip_operator: u.ip_operator,
+                                            ip_count: u.ip_count,
+                                            auto_rotate_user_proxy: u.auto_rotate_user_proxy
                                         })
                                     });
                                     if (res.ok) successCount++;
@@ -5090,7 +5389,17 @@ async function testUserSocksProxy() {
                                         block_porn: u.block_porn,
                                         block_ads: u.block_ads,
                                         frag_len: u.frag_len,
-                                        frag_int: u.frag_int
+                                        frag_int: u.frag_int,
+                                        user_proxy_iata: u.user_proxy_iata,
+                                        user_socks5: u.user_socks5,
+                                        user_proxy_ip: u.user_proxy_ip,
+                                        auto_reset_vol_days: u.auto_reset_vol_days,
+                                        auto_reset_req_days: u.auto_reset_req_days,
+                                        auto_rotate_ip: u.auto_rotate_ip,
+                                        rotate_time: u.rotate_time,
+                                        ip_operator: u.ip_operator,
+                                        ip_count: u.ip_count,
+                                        auto_rotate_user_proxy: u.auto_rotate_user_proxy
                                     })
                                 });
                                 if (res.ok) successCount++;
@@ -5157,7 +5466,7 @@ async function testUserSocksProxy() {
                 window.location.reload();
             }
         }
-const CURRENT_VERSION = '1.9.13';
+const CURRENT_VERSION = '1.10.0';
 const UPDATE_FIX = "constsCURRENT_VERSION='d.d.d'";
 		async function checkForUpdates(isManual = false) {
             try {
@@ -5364,6 +5673,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (e.target.id === 'qr-modal') toggleQrModal(false);
                 if (e.target.id === 'usage-warning-modal') closeUsageWarning();
                 if (e.target.id === 'free-panel-warning-modal') closeFreePanelWarning();
+                if (e.target.id === 'online-counter-warning-modal') closeOnlineCounterWarning();
+				if (e.target.id === 'config-count-warning-modal') closeConfigCountWarning();
                 if (e.target.id === 'global-message-modal') {
                     const closeBtn = document.getElementById('global-message-close-btn');
                     if (closeBtn) closeBtn.click();
@@ -5415,7 +5726,8 @@ function toggleProxySelectorModal(show) { setModalState('proxy-selector-modal', 
 				const lines = text.split('\\n').map(function(l) { return l.trim(); }).filter(function(l) { return l.length > 5; });
 				if (lines.length > 0) {
 					const randomProxy = lines[Math.floor(Math.random() * lines.length)];
-					document.getElementById('user-socks5-input').value = randomProxy;
+					window.proxyFieldsData[window.activeProxyIndex || 0] = randomProxy;
+					if (typeof window.renderProxyFieldsUI === 'function') window.renderProxyFieldsUI();
 					const userProxyResult = document.getElementById('test-user-proxy-result');
 					if (userProxyResult) {
 					    userProxyResult.innerText = '';
@@ -5583,7 +5895,8 @@ async function fetchAndLoadProxy() {
                 bestProxy = fallbackProxy.proxy;
             }
             if (bestProxy) {
-                document.getElementById("user-socks5-input").value = bestProxy;
+                window.proxyFieldsData[window.activeProxyIndex || 0] = bestProxy;
+                if (typeof window.renderProxyFieldsUI === 'function') window.renderProxyFieldsUI();
                 document.getElementById("test-user-proxy-result").innerText = "";
                 toggleProxySelectorModal(false);
                 showToast("پـروکـسـی با بهترین امتیاز لود شد.");
@@ -6007,24 +6320,65 @@ if (u.user_proxy_iata) {
     flagContainer.innerText = flag + " " + u.user_proxy_iata.toUpperCase();
     flagContainer.style.display = 'block'; 
 } else if (u.user_socks5 || u.user_proxy_ip) {
-    flagContainer.innerText = "⏳ تست پـروکـسـی...";
-    flagContainer.style.display = 'block'; 
-    const targetProxy = u.user_socks5 || u.user_proxy_ip;
-    fetch('/api/test-proxy', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ proxy: targetProxy })
-    })
-    .then(res => res.json())
-    .then(data => {
-        if (data.success && data.country) {
-            flagContainer.innerText = getFlagEmoji(data.country);
+    flagContainer.style.display = 'block';
+    let proxyList = [];
+    try {
+        if (u.user_socks5 && u.user_socks5.trim().startsWith("[")) {
+            proxyList = JSON.parse(u.user_socks5);
         } else {
-            flagContainer.innerText = "🌐";
+            proxyList = [u.user_socks5 || u.user_proxy_ip];
         }
-    })
-    .catch(() => {
-        flagContainer.innerText = "🌐";
+    } catch(e) {
+        proxyList = [u.user_socks5 || u.user_proxy_ip];
+    }
+    
+    // ۱. نمایش اولیه از کش (یا علامت لودینگ)
+    let initialFlags = proxyList.map(item => {
+        let targetProxy = typeof item === 'object' && item !== null ? item.proxy : item;
+        let targetCountry = typeof item === 'object' && item !== null ? item.country : null;
+        if (targetCountry) return getFlagEmoji(targetCountry);
+        try {
+            const proxyFlagCache = JSON.parse(localStorage.getItem('proxy_flag_cache') || '{}');
+            if (proxyFlagCache[targetProxy]) return proxyFlagCache[targetProxy];
+        } catch(e) {}
+        return '⏳';
+    });
+    
+    flagContainer.innerText = initialFlags.join(' ');
+
+    // ۲. دریافت اطلاعات برای پرچم‌های نامشخص و آپدیت نهایی
+    Promise.all(proxyList.map((item, index) => {
+        let targetProxy = typeof item === 'object' && item !== null ? item.proxy : item;
+        let targetCountry = typeof item === 'object' && item !== null ? item.country : null;
+        
+        if (targetCountry) return Promise.resolve(getFlagEmoji(targetCountry));
+        
+        try {
+            const proxyFlagCache = JSON.parse(localStorage.getItem('proxy_flag_cache') || '{}');
+            if (proxyFlagCache[targetProxy]) return Promise.resolve(proxyFlagCache[targetProxy]);
+        } catch(e) {}
+
+        return fetch('/api/test-proxy', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ proxy: targetProxy })
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (data.success && data.country) {
+                const flag = getFlagEmoji(data.country);
+                try {
+                    const cache = JSON.parse(localStorage.getItem('proxy_flag_cache') || '{}');
+                    cache[targetProxy] = flag;
+                    localStorage.setItem('proxy_flag_cache', JSON.stringify(cache));
+                } catch(e) {}
+                return flag;
+            }
+            return '🌐';
+        })
+        .catch(() => '🌐');
+    })).then(flags => {
+        flagContainer.innerText = flags.join(' ');
     });
 }
             const badge = document.getElementById('live-connections-badge');
