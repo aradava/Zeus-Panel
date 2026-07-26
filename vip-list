@@ -40,5 +40,11 @@
   },
   {
     "name": "US.txt"
+  },
+  {
+    "name": "CA.txt"
+  },
+  {
+    "name": "KR.txt"
   }
 ]
