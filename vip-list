@@ -1,5 +1,8 @@
 [
   {
+    "name": "CA.txt"
+  },
+  {
     "name": "CH.txt"
   },
   {
@@ -21,6 +24,9 @@
     "name": "IT.txt"
   },
   {
+    "name": "KR.txt"
+  },
+  {
     "name": "MX.txt"
   },
   {
@@ -37,14 +43,5 @@
   },
   {
     "name": "US.txt"
-  },
-  {
-    "name": "KR.txt"
-  },
-  {
-    "name": "CA.txt"
-  },
-  {
-    "name": "SE.txt"
   }
 ]
