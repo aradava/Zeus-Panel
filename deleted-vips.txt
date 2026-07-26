@@ -29,4 +29,3 @@ NL|socks5://nyx404:92821Bbb@trolley.proxy.rlwy.net:13284
 LV|ilrvzysv:8Wo6HVKqlsGs@31.57.28.140:1080
 US|bzceqtr9:d5rx4ha72jsk@myworld.seenothinsoon.tr:17301
 DE|ytpfiawj:UOaJh1m9wevt@132.243.242.176:1080
-FR|fsqtxfmt:SQ2YQfOtHUFY@51.210.224.211:1080
