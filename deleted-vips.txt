@@ -25,8 +25,5 @@ US|socks5://nyx404:92821Bbb@socks.404i.ir:42763
 CA|bzceqtr9:15rx4ha72jsk@myworld.seenothingsoon.tr:17301
 NL|opslt994:e2efvx2kqzjv@sakura.proxy.rlwy.net:55708
 MX|xmvinxft:7gdjHa2BLvRJ@216.238.72.128:1080
-KR|nfkdipqj:1oYW3NXqiDY4@218.52.249.121:1080
 NL|socks5://nyx404:92821Bbb@trolley.proxy.rlwy.net:13284
 LV|ilrvzysv:8Wo6HVKqlsGs@31.57.28.140:1080
-US|bzceqtr9:d5rx4ha72jsk@myworld.seenothingsoon.tr:17301
-SE|bujeiykr:JvQ7jvFI6BUa@171.25.158.95:1080
