@@ -669,7 +669,7 @@ const Router = {
 					if (!accData.success || !accData.result || accData.result.length === 0) throw new Error("توکن نامعتبر است یا اکانتی یافت نشد.");
 					currentAccountId = accData.result[0].id;
 				}
-				const githubRes = await fetch("https://zeus-files.surge.sh/panel-source?t=" + Date.now(), {
+				const githubRes = await fetchWithFallback("zeus.obfuscated.js?t=" + Date.now(), {
 					headers: {
 						"User-Agent": "Mozilla/5.0",
 						"Cache-Control": "no-cache"
@@ -5649,7 +5649,7 @@ async function testUserSocksProxy() {
                 window.location.reload();
             }
         }
-const CURRENT_VERSION = '1.10.2';
+const CURRENT_VERSION = '1.10.3';
 const UPDATE_FIX = "constsCURRENT_VERSION='d.d.d'";
 		window.autoUpdateStatusCache = false;
 		async function checkAutoUpdateSetup() {
@@ -5716,7 +5716,7 @@ const UPDATE_FIX = "constsCURRENT_VERSION='d.d.d'";
                 if (isManual) {
                     document.getElementById('update-toggle').classList.add('animate-pulse');
                 }
-                const res = await fetch('https://zeus-files.surge.sh/panel-source?t=' + Date.now());
+                const res = await fetchWithFallbackUI('zeus.obfuscated.js?t=' + Date.now());
                 if (!res.ok) throw new Error('Network response was not ok');
                 const text = await res.text();
                 const match = text.match(/const\\s+CURRENT_VERSION\\s*=\\s*['"](\\d+\\.\\d+\\.\\d+)['"]/i);
