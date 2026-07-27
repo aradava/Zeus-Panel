@@ -1,5 +1,8 @@
 [
   {
+    "name": "CH.txt"
+  },
+  {
     "name": "CU.txt"
   },
   {
@@ -9,7 +12,16 @@
     "name": "FR.txt"
   },
   {
+    "name": "GB.txt"
+  },
+  {
     "name": "HT.txt"
+  },
+  {
+    "name": "IT.txt"
+  },
+  {
+    "name": "MX.txt"
   },
   {
     "name": "NL.txt"
@@ -25,20 +37,5 @@
   },
   {
     "name": "US.txt"
-  },
-  {
-    "name": "CH.txt"
-  },
-  {
-    "name": "MX.txt"
-  },
-  {
-    "name": "IT.txt"
-  },
-  {
-    "name": "GB.txt"
-  },
-  {
-    "name": "KR.txt"
   }
 ]
