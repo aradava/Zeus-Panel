@@ -2,7 +2,7 @@
   
 # ⚡ ZEUS PANEL
 
-[![Version](https://img.shields.io/badge/Version-v1.10.1-blue.svg?style=for-the-badge&logo=cloudflare)](https://github.com/zeus-panel/ZEUS-PANEL)
+[![Version](https://img.shields.io/badge/Version-v1.10.6-blue.svg?style=for-the-badge&logo=cloudflare)](https://github.com/zeus-panel/ZEUS-PANEL)
 [![Platform](https://img.shields.io/badge/Platform-Cloudflare%20Workers-f38020.svg?style=for-the-badge&logo=cloudflare&logoColor=white)](https://workers.cloudflare.com/)
 [![Database](https://img.shields.io/badge/Database-Cloudflare%20D1%20SQL-F38020.svg?style=for-the-badge&logo=sqlite&logoColor=white)](https://developers.cloudflare.com/d1/)
 [![Protocol](https://img.shields.io/badge/Protocol-VLESS%20%2F%20WebSocket-00c7b7.svg?style=for-the-badge)](https://github.com/zeus-panel/ZEUS-PANEL)
@@ -153,9 +153,9 @@ The script features an interactive menu, automatic port configuration, random se
 
 <a href="https://www.star-history.com/?repos=zeus-panel%2FZEUS-PANEL&type=timeline&legend=top-left">
  <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=zeus-panel/ZEUS-PANEL&type=timeline&theme=dark&legend=top-left&sealed_token=i_sLQbXdIcBHxepyO44kQnvS7Irvv4WXN6ymij0Q7QoNRXE7OZrtzWucaSXZkmV6a75z2K86DZT3czyswa0OKLXbvo140fpDGX5k8PNihA-ApzioHjH0cQ" />
-   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=zeus-panel/ZEUS-PANEL&type=timeline&legend=top-left&sealed_token=i_sLQbXdIcBHxepyO44kQnvS7Irvv4WXN6ymij0Q7QoNRXE7OZrtzWucaSXZkmV6a75z2K86DZT3czyswa0OKLXbvo140fpDGX5k8PNihA-ApzioHjH0cQ" />
-   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=zeus-panel/ZEUS-PANEL&type=timeline&legend=top-left&sealed_token=i_sLQbXdIcBHxepyO44kQnvS7Irvv4WXN6ymij0Q7QoNRXE7OZrtzWucaSXZkmV6a75z2K86DZT3czyswa0OKLXbvo140fpDGX5k8PNihA-ApzioHjH0cQ" />
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=zeus-panel/ZEUS-PANEL&type=timeline&theme=dark&legend=top-left&sealed_token=oP9zAnvo0_8sqeUJkBg9MJ5J9u-6RWyxqk5yT6xsPQnmDOTUPxtEDIQtzQmVWkOqqyp5ShOwR0_ccnySRUEhvcgS_4JSdL_W5S-b0XnQnU8eiRG7oSBY-Q" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=zeus-panel/ZEUS-PANEL&type=timeline&legend=top-left&sealed_token=oP9zAnvo0_8sqeUJkBg9MJ5J9u-6RWyxqk5yT6xsPQnmDOTUPxtEDIQtzQmVWkOqqyp5ShOwR0_ccnySRUEhvcgS_4JSdL_W5S-b0XnQnU8eiRG7oSBY-Q" />
+   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=zeus-panel/ZEUS-PANEL&type=timeline&legend=top-left&sealed_token=oP9zAnvo0_8sqeUJkBg9MJ5J9u-6RWyxqk5yT6xsPQnmDOTUPxtEDIQtzQmVWkOqqyp5ShOwR0_ccnySRUEhvcgS_4JSdL_W5S-b0XnQnU8eiRG7oSBY-Q" />
  </picture>
 </a>
 
